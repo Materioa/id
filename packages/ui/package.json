@@ -1,0 +1,21 @@
+{
+  "name": "@materio/ui",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    "./styles.css": "./src/app.css",
+    "./components/*": "./src/components/*"
+  },
+  "peerDependencies": {
+    "svelte": "^5.56.1"
+  },
+  "dependencies": {
+    "lucide-svelte": "^0.475.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.3.0",
+    "vite": "^6.0.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0"
+  }
+}

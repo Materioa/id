@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "materio-auth",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_als", "nodejs_compat"],
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "assets": {"binding": "ASSETS", "directory": ".svelte-kit/cloudflare"},
+  "workers_dev": true,
+  "preview_urls": true,
+  "routes": [
+    {"pattern": "auth.getmaterio.app", "zone_name": "getmaterio.app", "custom_domain": true, "enabled": true, "previews_enabled": false},
+    {"pattern": "sso.getmaterio.app", "zone_name": "getmaterio.app", "custom_domain": true, "enabled": true, "previews_enabled": false}
+  ],
+  "vars": {},
+  "observability": {"logs": {"enabled": true}, "traces": {"enabled": true}}
+}

@@ -1,0 +1,15 @@
+{
+  "name": "materio-monorepo",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "all": "bun run scripts/dev-all.ts",
+    "dev:all": "bun run scripts/dev-all.ts",
+    "dev:accounts": "bun --env-file=../../.env --cwd apps/accounts dev",
+    "dev:auth": "bun --env-file=../../.env --cwd apps/auth dev -- --port 5174",
+    "dev:admin": "bun --env-file=../../.env --cwd apps/admin dev -- --port 5175",
+    "check": "bun run --filter './apps/*' check",
+    "build": "bun run --filter './apps/*' build"
+  },
+  "packageManager": "bun@1.3.0"
+}
