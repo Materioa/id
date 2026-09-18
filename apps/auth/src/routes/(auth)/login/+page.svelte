@@ -746,9 +746,9 @@
         <div class="mt-4 text-center">
           <p class="text-[11px] text-muted-foreground leading-relaxed">
             By continuing, you agree to the{' '}
-            <a href="/terms" class="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">Terms of Service</a>
+            <a href="https://getmaterio.app/terms" target="_blank" class="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">Terms of Service</a>
             {' '}and{' '}
-            <a href="/privacy" class="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">Privacy Policy</a>.
+            <a href="https://getmaterio.app/privacy" target="_blank" class="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">Privacy Policy</a>.
           </p>
         </div>
 
