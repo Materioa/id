@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { getAppUrls } from '@materio/config';
+  import { getAppUrls, getClientCookie, setClientCookie } from '@materio/config';
 
   onMount(() => {
     const url = new URL(window.location.href);
@@ -11,7 +11,16 @@
       return;
     }
 
-    const token = localStorage.getItem('token');
+    const cookieToken = getClientCookie('materio_token');
+    let token = localStorage.getItem('token');
+
+    if (cookieToken) {
+      token = cookieToken;
+      localStorage.setItem('token', cookieToken);
+    } else if (token) {
+      setClientCookie('materio_token', token);
+    }
+
     if (!token) {
       const appUrls = getAppUrls(window.location.origin);
       window.location.href = `${appUrls.auth}/login?callback=${encodeURIComponent(window.location.origin + '/auth/callback')}`;

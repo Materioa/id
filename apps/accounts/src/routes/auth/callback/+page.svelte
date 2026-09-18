@@ -3,12 +3,14 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { userStore } from '$lib/stores/user.svelte';
-  import { getAppUrls } from '@materio/config';
+  import { getAppUrls, setClientCookie } from '@materio/config';
 
   let errorMsg = $state('');
 
   onMount(async () => {
     const code = $page.url.searchParams.get('code');
+    const next = $page.url.searchParams.get('next') || '/overview';
+
     if (!code) {
       errorMsg = 'No authentication code provided.';
       const appUrls = getAppUrls(window.location.origin);
@@ -31,10 +33,11 @@
 
       if (data.token) {
         localStorage.setItem('token', data.token);
+        setClientCookie('materio_token', data.token);
         if (data.user) {
           userStore.setUser(data.user);
         }
-        goto('/overview');
+        goto(next);
       } else {
         throw new Error('No token received');
       }

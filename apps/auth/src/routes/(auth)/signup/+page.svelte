@@ -1,5 +1,5 @@
 <svelte:head>
-  <title>Create your Materio Account</title>
+  <title>Create your Materio ID</title>
 </svelte:head>
 
 <script lang="ts">
@@ -283,7 +283,7 @@
       </div>
 
       <div class="mb-8">
-        <h1 class="text-2xl lg:text-[28px] font-bold text-foreground mb-2 leading-tight">Create an Account</h1>
+        <h1 class="text-2xl lg:text-[28px] font-bold text-foreground mb-2 leading-tight">Create a Materio ID</h1>
         <p class="text-muted-foreground text-[15px]">Complete your registration.</p>
       </div>
 
@@ -515,14 +515,14 @@
             disabled={isLoading}
             class="btn-base btn-primary w-full py-3.5 mt-4"
           >
-            {isLoading ? 'Creating Account...' : 'Continue'}
+            {isLoading ? 'Creating Materio ID...' : 'Continue'}
           </button>
         </form>
       {/if}
 
       <div class="mt-8 text-center text-[14px]">
         <p class="text-muted-foreground">
-          Already have an account? <a href="/login" class="text-foreground font-semibold hover:underline underline-offset-4">Log in instead</a>
+          Already have a Materio ID? <a href="/login" class="text-foreground font-semibold hover:underline underline-offset-4">Log in instead</a>
         </p>
       </div>
 

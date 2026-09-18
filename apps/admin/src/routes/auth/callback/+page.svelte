@@ -3,13 +3,14 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { userStore } from '$lib/stores/user.svelte';
-  import { getAppUrls } from '@materio/config';
+  import { getAppUrls, setClientCookie } from '@materio/config';
 
   let errorMsg = $state('');
   let isDenied = $state(false);
 
   onMount(async () => {
     const code = $page.url.searchParams.get('code');
+    const next = $page.url.searchParams.get('next') || '/admin/overview';
     const appUrls = getAppUrls(window.location.origin);
 
     if (!code) {
@@ -52,7 +53,7 @@
           if (!isUserAdmin) {
             isDenied = true;
             userStore.logout();
-            errorMsg = 'Access denied: Your account does not have admin privileges.';
+            errorMsg = 'Access denied: Your Materio ID does not have admin privileges.';
             setTimeout(() => {
               window.location.href = `${appUrls.accounts}/overview`;
             }, 3500);
@@ -60,7 +61,8 @@
           }
         }
         localStorage.setItem('token', data.token);
-        goto('/admin/overview');
+        setClientCookie('materio_token', data.token);
+        goto(next);
       } else {
         throw new Error('No token received');
       }
@@ -87,12 +89,12 @@
       </div>
       <h2 class="text-xl font-bold mb-2">Access Denied</h2>
       <p class="text-destructive text-sm font-medium mb-4">{errorMsg}</p>
-      <p class="text-xs text-muted-foreground mb-6">You will be redirected back to the Accounts dashboard shortly...</p>
+      <p class="text-xs text-muted-foreground mb-6">You will be redirected back to the Materio ID dashboard shortly...</p>
       <button 
         onclick={returnToAccounts}
         class="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
       >
-        Go to Account Dashboard
+        Go to Materio ID Dashboard
       </button>
     {:else}
       <div class="inline-block animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mb-4"></div>

@@ -1,5 +1,5 @@
 <svelte:head>
-  <title>Materio Account</title>
+  <title>Materio ID</title>
 </svelte:head>
 
 <script lang="ts">
@@ -217,7 +217,7 @@
     <!-- Open Profile Header (scaled down) -->
     <div class="flex flex-col items-start gap-3">
       <!-- Avatar -->
-      <div class="relative w-20 h-20 rounded-full overflow-hidden shadow-sm flex items-center justify-center bg-background ring-4 ring-background">
+      <div class="relative w-20 h-20 min-w-[80px] min-h-[80px] rounded-full overflow-hidden shadow-sm flex items-center justify-center bg-card ring-4 ring-card shrink-0">
         {#if user.profilePicture}
           <img src={user.profilePicture} alt="Avatar" class="w-full h-full object-cover" />
         {:else}
@@ -227,24 +227,24 @@
 
       <!-- User Info -->
       <div class="space-y-0.5 mt-1">
-        <div class="flex items-center gap-1.5">
-          <h1 class="text-2xl font-bold text-foreground tracking-tight">
+        <div class="flex items-center gap-2">
+          <h1 class="text-2xl sm:text-3xl font-serif font-normal text-foreground tracking-tight">
             {user.displayName || user.username || 'User'}
           </h1>
           <!-- Verification Badge -->
           {#if user.plan === 'Super'}
             <span title="Verified Super User"><HugeiconsIcon icon={CheckmarkBadge01Icon} size={20} class="text-[#800020]" /></span>
           {:else if user.plan === 'Pro'}
-            <span title="Verified Pro User"><HugeiconsIcon icon={CheckmarkBadge01Icon} size={20} class="text-[#D4AF37]" /></span>
+            <span title="Verified Pro User"><HugeiconsIcon icon={CheckmarkBadge01Icon} size={20} class="text-[#788c15]" /></span>
           {/if}
         </div>
         <!-- Align email/username below name -->
-        <p class="text-muted-foreground font-medium text-[15px]">{user.email || '@' + user.username}</p>
+        <p class="text-muted-foreground font-medium text-[14px]">{user.email || '@' + user.username}</p>
       </div>
 
       <!-- Edit Icon / Action -->
       <div class="mt-1">
-        <a href="/profile" class="inline-flex items-center gap-2 text-xs font-semibold text-foreground bg-card hover:bg-muted/50 border border-border/60 transition-colors rounded-xl px-3 py-1.5 shadow-sm">
+        <a href="/profile" class="btn-base btn-secondary text-xs px-3 py-1.5 shadow-xs">
           <HugeiconsIcon icon={Edit01Icon} size={14} />
           Edit Profile
         </a>
@@ -301,18 +301,18 @@
   <!-- Sections Grid -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
     <!-- Recent Reads -->
-    <div class="bg-card border border-border/60 p-5 shadow-sm rounded-2xl">
+    <div class="bg-secondary/30 dark:bg-muted/20 border border-border/70 p-5 rounded-xl">
       <div class="flex items-center gap-2 border-b border-border/50 pb-3 mb-3">
         <HugeiconsIcon icon={HistoryIcon} size={16} class="text-muted-foreground" />
-        <h3 class="font-semibold text-foreground text-sm">Recent Reads</h3>
+        <h3 class="font-serif font-normal text-foreground text-base">Recent Reads</h3>
       </div>
 
       {#if recentReads.length === 0}
         <div class="py-10 text-center text-sm text-muted-foreground">No recent reading history.</div>
       {:else}
-        <div class="space-y-3">
+        <div class="space-y-2.5">
           {#each recentReads as read}
-            <div class="flex items-center justify-between p-3 bg-muted/40 border border-border/50 rounded-xl hover:bg-muted/60 transition-colors group cursor-pointer">
+            <div class="flex items-center justify-between p-3 bg-card border border-border/60 rounded-lg hover:border-border transition-all group cursor-pointer shadow-xs">
               <div class="flex items-center gap-3 overflow-hidden">
                 <HugeiconsIcon icon={File01Icon} size={16} class="text-primary shrink-0" />
                 <div class="overflow-hidden">
@@ -320,7 +320,7 @@
                   <p class="text-[11px] text-muted-foreground mt-0.5">{read.meta}</p>
                 </div>
               </div>
-              <span class="text-[10px] font-medium text-muted-foreground/80 shrink-0 bg-border/40 px-2 py-0.5 rounded-full">{read.time}</span>
+              <span class="text-[10px] font-medium text-muted-foreground shrink-0 bg-muted/60 px-2 py-0.5 rounded-full">{read.time}</span>
             </div>
           {/each}
         </div>
@@ -328,15 +328,15 @@
     </div>
 
     <!-- Suggested -->
-    <div class="bg-card border border-border/60 p-5 shadow-sm rounded-2xl">
+    <div class="bg-secondary/30 dark:bg-muted/20 border border-border/70 p-5 rounded-xl">
       <div class="flex items-center gap-2 border-b border-border/50 pb-3 mb-3">
         <HugeiconsIcon icon={SparklesIcon} size={16} class="text-primary" />
-        <h3 class="font-semibold text-foreground text-sm">Suggested for You</h3>
+        <h3 class="font-serif font-normal text-foreground text-base">Suggested for You</h3>
       </div>
 
-      <div class="space-y-3">
+      <div class="space-y-2.5">
         {#each suggestions as suggest}
-          <div class="flex items-center justify-between p-3 bg-muted/40 border border-border/50 rounded-xl hover:bg-muted/60 transition-colors group cursor-pointer">
+          <div class="flex items-center justify-between p-3 bg-card border border-border/60 rounded-lg hover:border-border transition-all group cursor-pointer shadow-xs">
             <div class="flex items-center gap-3 overflow-hidden">
               <HugeiconsIcon icon={File01Icon} size={16} class="text-primary shrink-0 animate-pulse" />
               <div class="overflow-hidden">

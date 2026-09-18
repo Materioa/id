@@ -219,7 +219,7 @@
 <div class="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-300">
   <div>
     <h1 class="text-2xl font-bold tracking-tight text-foreground">Ban Management</h1>
-    <p class="text-sm text-muted-foreground mt-1">Warn or ban abusive identities and accounts.</p>
+    <p class="text-sm text-muted-foreground mt-1">Warn or ban abusive identities and Materio IDs.</p>
   </div>
 
   {#if error}
@@ -239,7 +239,7 @@
             onclick={() => banType = 'account'}
             class="font-medium transition-colors {banType === 'account' ? 'text-primary underline underline-offset-4' : 'text-muted-foreground hover:text-foreground'}"
           >
-            Account
+            Materio ID
           </button>
           <span class="text-border">|</span>
           <button

@@ -61,20 +61,20 @@
   >
     <!-- Modal Panel (Bottom sheet on mobile, rounded modal on desktop) -->
     <div 
-      class="relative flex flex-col w-full bg-card sm:rounded-[24px] rounded-t-[32px] border border-border {maxWidthClass} shadow-2xl max-h-[90vh] overflow-hidden"
-      transition:fly={{ y: 50, duration: 300, opacity: 0 }}
+      class="relative flex flex-col w-full bg-card sm:rounded-2xl rounded-t-2xl border border-border/80 {maxWidthClass} shadow-[0_8px_36px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_36px_rgba(0,0,0,0.4)] max-h-[90vh] overflow-hidden"
+      transition:fly={{ y: 50, duration: 250, opacity: 0 }}
     >
       <!-- Mobile drag handle -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="sm:hidden flex justify-center pt-3 pb-1 w-full" onclick={handleClose}>
-        <div class="w-12 h-1.5 rounded-full bg-muted-foreground/30"></div>
+        <div class="w-12 h-1 rounded-full bg-muted-foreground/30"></div>
       </div>
 
       <!-- Header -->
       {#if title}
-        <div class="flex items-center justify-between px-6 pt-4 pb-2 sm:py-6 border-b border-border/50">
-          <h2 class="text-lg font-semibold text-foreground">{title}</h2>
+        <div class="flex items-center justify-between px-6 pt-4 pb-3 sm:py-5 border-b border-border/60">
+          <h2 class="text-lg font-serif font-normal text-foreground tracking-tight">{title}</h2>
           <button 
             onclick={handleClose}
             class="p-2 -mr-2 rounded-full hover:bg-muted text-muted-foreground active:scale-[0.95] transition-all"

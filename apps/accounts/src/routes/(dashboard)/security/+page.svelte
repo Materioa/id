@@ -239,10 +239,10 @@
 
       if (!res.ok) {
         const data = await res.json() as any;
-        throw new Error(data.error || 'Failed to delete account');
+        throw new Error(data.error || 'Failed to delete Materio ID');
       }
 
-      addToast('Account deleted', 'success');
+      addToast('Materio ID deleted', 'success');
       localStorage.removeItem('token');
       goto('/login');
     } catch (e: any) {
@@ -300,7 +300,7 @@
   <div class="flex flex-col sm:flex-row sm:items-center items-start justify-between gap-4 border-b border-border/60 pb-6">
     <div>
       <h1 class="text-2xl font-bold tracking-tight text-foreground">Security</h1>
-      <p class="text-sm text-muted-foreground mt-1">Manage your account security, passwords, and active login sessions.</p>
+      <p class="text-sm text-muted-foreground mt-1">Manage your Materio ID security, passwords, and active login sessions.</p>
     </div>
   </div>
 
@@ -500,7 +500,7 @@
 
         <div class="space-y-3">
           <p class="text-sm text-muted-foreground leading-relaxed">
-            Save these recovery keys in a safe place. They can be used to access your account if you lose your 2FA device.
+            Save these recovery keys in a safe place. They can be used to access your Materio ID if you lose your 2FA device.
           </p>
           
           <div class="bg-muted/20 border border-border rounded-xl p-4">
@@ -521,7 +521,7 @@
     <Modal bind:isOpen={showDisable2faModal} title="Disable Two-Factor Authentication">
       <div class="space-y-4">
         <p class="text-sm text-muted-foreground leading-relaxed">
-          Are you sure you want to disable 2FA? This will significantly reduce your account security and make it easier for unauthorized users to access your data.
+          Are you sure you want to disable 2FA? This will significantly reduce your Materio ID security and make it easier for unauthorized users to access your data.
         </p>
         <div class="flex justify-end gap-3 pt-4 border-t border-border/50">
           <button class="btn-base btn-secondary" onclick={() => showDisable2faModal = false}>Cancel</button>
@@ -597,19 +597,19 @@
 
     <div class="flex flex-col sm:flex-row sm:sm:items-center items-start justify-between gap-4">
       <div>
-        <h4 class="font-semibold text-sm text-foreground">Delete Account</h4>
-        <p class="text-xs text-muted-foreground mt-1">Permanently delete your account and all associated data.</p>
+        <h4 class="font-semibold text-sm text-foreground">Delete Materio ID</h4>
+        <p class="text-xs text-muted-foreground mt-1">Permanently delete your Materio ID and all associated data.</p>
       </div>
       <button 
         onclick={deleteAccount}
         class="btn-base btn-destructive"
       >
-        Delete Account
+        Delete Materio ID
       </button>
     </div>
   </div>
 
-  <Modal bind:isOpen={showDeleteAccountModal} title="Delete Account">
+  <Modal bind:isOpen={showDeleteAccountModal} title="Delete Materio ID">
     <div class="space-y-4">
       <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-500">
         <HugeiconsIcon icon={AlertCircleIcon} size={20} class="shrink-0 mt-0.5" />

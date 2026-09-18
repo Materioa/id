@@ -28,9 +28,9 @@
 
   let {
     data = [],
-    emptyColor = '#ebedf0',
-    fontColor = '#888',
-    colors = ['#9be9a8', '#40c463', '#30a14e', '#216e39'],
+    emptyColor = 'hsl(var(--muted))',
+    fontColor = 'hsl(var(--muted-foreground))',
+    colors = ['#e5eacd', '#b2c248', '#788c15', '#5b6f00'],
     cellSize = 11,
     cellGap = 3,
   }: Props = $props();

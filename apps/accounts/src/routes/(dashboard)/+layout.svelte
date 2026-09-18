@@ -14,7 +14,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { userStore } from '$lib/stores/user.svelte';
-  import { getAppUrls } from '@materio/config';
+  import { getAppUrls, getClientCookie, setClientCookie, clearClientCookie } from '@materio/config';
   import ToastProvider from '$lib/components/ToastProvider.svelte';
 
   let { children } = $props();
@@ -60,13 +60,13 @@
   // Breadcrumbs calculation
   const getBreadcrumbs = () => {
     const path = $page.url.pathname;
-    if (path.includes('/profile')) return ['My Account', 'Personal Info'];
-    if (path.includes('/security')) return ['My Account', 'Security & Access'];
-    if (path.includes('/api-keys')) return ['My Account', 'Developer Apps'];
-    if (path.includes('/overview')) return ['My Account', 'Home'];
-    if (path.includes('/upgrade')) return ['My Account', 'Payments and Subscription'];
-    if (path.includes('/data-controls')) return ['My Account', 'Data Controls'];
-    return ['My Account', 'Home'];
+    if (path.includes('/profile')) return ['Materio ID', 'Personal Info'];
+    if (path.includes('/security')) return ['Materio ID', 'Security & Access'];
+    if (path.includes('/api-keys')) return ['Materio ID', 'Developer Apps'];
+    if (path.includes('/overview')) return ['Materio ID', 'Home'];
+    if (path.includes('/upgrade')) return ['Materio ID', 'Payments and Subscription'];
+    if (path.includes('/data-controls')) return ['Materio ID', 'Data Controls'];
+    return ['Materio ID', 'Home'];
   };
 
   // Nav list containing ONLY actual features
@@ -80,18 +80,69 @@
   ];
 
   onMount(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      const appUrls = getAppUrls(window.location.origin);
-      window.location.href = `${appUrls.auth}/login?callback=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
-      return;
-    }
+    async function initSession() {
+      // 1. Universal handoff code exchange if present in URL
+      const searchParams = new URLSearchParams(window.location.search);
+      const code = searchParams.get('code');
+      if (code) {
+        try {
+          const res = await fetch('/api/v2/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'exchange', code })
+          });
+          const data = await res.json() as any;
+          if (data.token) {
+            localStorage.setItem('token', data.token);
+            setClientCookie('materio_token', data.token);
+            if (data.user) {
+              userStore.setUser(data.user);
+            }
+            // Remove ?code= from the URL cleanly
+            searchParams.delete('code');
+            const newSearch = searchParams.toString();
+            const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+            window.history.replaceState({}, '', newUrl);
+          }
+        } catch (err) {
+          console.error('Failed to exchange handoff code:', err);
+        }
+      }
 
-    userStore.loadUser();
+      // 2. Synchronize with shared cross-app cookie
+      const cookieToken = getClientCookie('materio_token');
+      let token = localStorage.getItem('token');
 
-    fetch('/api/v2/profile', { headers: { 'Authorization': `Bearer ${token}` } })
-      .then(res => res.json())
-      .then((data: any) => {
+      if (cookieToken && cookieToken !== token) {
+        token = cookieToken;
+        localStorage.setItem('token', cookieToken);
+      } else if (!token && cookieToken) {
+        token = cookieToken;
+        localStorage.setItem('token', cookieToken);
+      } else if (token && !cookieToken) {
+        setClientCookie('materio_token', token);
+      }
+
+      if (!token) {
+        const appUrls = getAppUrls(window.location.origin);
+        window.location.href = `${appUrls.auth}/login?callback=${encodeURIComponent(window.location.origin + '/auth/callback?next=' + encodeURIComponent(window.location.pathname + window.location.search))}`;
+        return;
+      }
+
+      userStore.loadUser();
+
+      try {
+        const res = await fetch('/api/v2/profile', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.status === 401) {
+          // Stale / revoked session: clear all storages and redirect
+          localStorage.removeItem('token');
+          clearClientCookie('materio_token');
+          userStore.logout();
+          const appUrls = getAppUrls(window.location.origin);
+          window.location.href = `${appUrls.auth}/login?callback=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
+          return;
+        }
+        const data = await res.json() as any;
         if (data && data.user) {
           userStore.setUser(data.user);
           if (data.suspended || data.user.isBanned) {
@@ -99,8 +150,12 @@
             suspensionReason = data.banReason || data.user.banReason || 'Violation of terms of service';
           }
         }
-      })
-      .catch(console.error);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    initSession();
 
     const savedState = localStorage.getItem('sidebar_collapsed');
     if (savedState) isCollapsed = savedState === 'true';
@@ -131,6 +186,7 @@
 
   function handleLogout() {
     userStore.logout();
+    clearClientCookie('materio_token');
     const appUrls = getAppUrls(window.location.origin);
     window.location.href = `${appUrls.auth}/logout?callback=${encodeURIComponent(window.location.origin)}`;
   }
@@ -152,17 +208,17 @@
       </div>
 
       <div class="space-y-3">
-        <h1 class="text-2xl font-bold tracking-tight text-foreground">
-          Account Suspended
+        <h1 class="text-2xl font-serif font-normal tracking-tight text-foreground">
+          Materio ID Suspended
         </h1>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          Your account has been suspended for <span class="font-medium text-foreground">{suspensionReason}</span> and thereby access has been revoked.
+          Your Materio ID has been suspended for <span class="font-medium text-foreground">{suspensionReason}</span> and thereby access has been revoked.
         </p>
       </div>
 
       <div class="flex items-center justify-center gap-3 pt-2">
         <a 
-          href="mailto:support@getmaterio.app?subject={encodeURIComponent('Account Suspension Appeal - @' + (userStore.user?.username || 'user'))}&body={encodeURIComponent('Hello Materio Team,\n\nMy account (@' + (userStore.user?.username || '') + ') has been suspended for:\n' + suspensionReason + '\n\nI believe this was a mistake because:\n[Please explain why your account should be reinstated]\n\nThank you.')}"
+          href="mailto:support@getmaterio.app?subject={encodeURIComponent('Materio ID Suspension Appeal - @' + (userStore.user?.username || 'user'))}&body={encodeURIComponent('Hello Materio Team,\n\nMy Materio ID (@' + (userStore.user?.username || '') + ') has been suspended for:\n' + suspensionReason + '\n\nI believe this was a mistake because:\n[Please explain why your Materio ID should be reinstated]\n\nThank you.')}"
           class="btn-base btn-primary"
         >
           File an Appeal
@@ -178,7 +234,7 @@
     </div>
   </div>
 {:else}
-  <div class="h-screen bg-secondary text-foreground font-sans flex md:p-1 md:gap-1 overflow-hidden">
+  <div class="h-screen bg-background text-foreground font-sans flex md:p-1.5 md:gap-1.5 overflow-hidden">
   <!-- Mobile Overlay -->
   {#if isMobileMenuOpen}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -188,33 +244,31 @@
 
   <!-- Sidebar Container -->
   <aside 
-    class="bg-secondary md:bg-transparent flex flex-col justify-between transition-all duration-300 select-none
+    class="bg-background md:bg-transparent flex flex-col justify-between transition-all duration-300 select-none
       fixed md:relative z-50 md:z-auto top-0 left-0 h-full
-      {isMobileMenuOpen ? '/*  */w-[260px] translate-x-0' : '-translate-x-full md:translate-x-0'}
-      {isCollapsed ? 'md:w-10' : 'md:w-55'}
+      {isMobileMenuOpen ? 'w-[260px] translate-x-0' : '-translate-x-full md:translate-x-0'}
+      {isCollapsed ? 'md:w-10' : 'md:w-56'}
       md:translate-x-0
     "
   >
     <!-- Sidebar Top Navigation Controls (Sticky) -->
-    <div class="px-4 md:px-2 pt-4 md:pt-2 pb-2 sticky top-0 z-20 bg-secondary md:bg-transparent">
+    <div class="px-4 md:px-2 pt-4 md:pt-2 pb-2 sticky top-0 z-20 bg-background md:bg-transparent">
       <!-- Sidebar Title & Toggle -->
       <div class="flex items-center {(isCollapsed && !isMobileMenuOpen) ? 'justify-center w-full' : 'justify-between px-1'} mb-8 h-8">
         {#if !(isCollapsed && !isMobileMenuOpen)}
-          <div class="flex items-center gap-2 animate-in fade-in duration-300">
-            <img src="/logo-wordmark.webp" alt="Materio" class="h-8 object-contain transition-all" />
+          <div class="flex items-center gap-2 animate-in fade-in duration-300 shrink-0">
+            <img src="/logo-wordmark.webp" alt="Materio" class="h-7 md:h-8 w-auto shrink-0 object-contain transition-all" />
           </div>
         {/if}
 
         <button 
           onclick={toggleSidebar} 
-          class="text-muted-foreground hover:text-foreground p-1.5 rounded hover:bg-muted transition-colors shrink-0 flex items-center justify-center {(isCollapsed && !isMobileMenuOpen) ? '' : 'mt-1'} md:flex {isMobileMenuOpen ? 'hidden' : ''}"
+          class="text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-muted/60 transition-colors shrink-0 flex items-center justify-center {(isCollapsed && !isMobileMenuOpen) ? '' : 'mt-1'} md:flex {isMobileMenuOpen ? 'hidden' : ''}"
           title={(isCollapsed && !isMobileMenuOpen) ? "Expand sidebar" : "Collapse sidebar"}
         >
           <HugeiconsIcon icon={SidebarLeftIcon} size={16} />
         </button>
       </div>
-
-      <!-- Navigation Arrows and History search removed per user request -->
 
     </div>
 
@@ -224,15 +278,15 @@
       <div class="space-y-6 pt-4 pb-4">
         <!-- Main Nav -->
         <div>
-          <nav class="space-y-0.5">
+          <nav class="space-y-1">
             {#each mainNav as item}
               <a 
                 href={item.href} 
                 onclick={closeMobileMenu}
-                class="flex items-center gap-3 px-2.5 py-2 rounded-xl text-sm transition-all duration-150 {isRouteActive(item.href) ? 'bg-background shadow-[0_1px_3px_rgba(0,0,0,0.05)] font-semibold text-foreground border border-border/50' : 'text-muted-foreground hover:bg-muted hover:text-foreground'} {(isCollapsed && !isMobileMenuOpen) ? 'md:justify-center' : ''}"
+                class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 {isRouteActive(item.href) ? 'bg-card shadow-xs font-medium text-foreground border border-border/80' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'} {(isCollapsed && !isMobileMenuOpen) ? 'md:justify-center' : ''}"
                 title={item.name}
               >
-                <HugeiconsIcon icon={item.icon} size={16} class="shrink-0 {isRouteActive(item.href) ? 'text-foreground font-bold' : 'text-muted-foreground'}" />
+                <HugeiconsIcon icon={item.icon} size={16} class="shrink-0 {isRouteActive(item.href) ? 'text-primary' : 'text-muted-foreground'}" />
                 {#if !(isCollapsed && !isMobileMenuOpen)}
                   <span class="truncate">{item.name}</span>
                 {/if}
@@ -244,14 +298,13 @@
     </div>
 
     <!-- Sidebar Footer (Sticky) -->
-    <div class="px-2 pb-2 pt-2 space-y-1 sticky bottom-0 z-20 bg-secondary md:bg-transparent">
+    <div class="px-2 pb-2 pt-2 space-y-1 sticky bottom-0 z-20 bg-background md:bg-transparent">
       <!-- Theme Switcher Pill -->
-
       <div class="flex justify-center {(isCollapsed && !isMobileMenuOpen) ? 'mb-4' : 'mb-2 px-1'}">
         {#if (isCollapsed && !isMobileMenuOpen)}
           <button 
             onclick={cycleTheme} 
-            class="w-full aspect-square flex items-center justify-center rounded-xl bg-background border border-border/50 text-foreground hover:bg-muted/40 transition-colors shadow-sm"
+            class="w-full aspect-square flex items-center justify-center rounded-lg bg-card border border-border/80 text-foreground hover:bg-muted/50 transition-colors shadow-xs"
             title="Toggle Theme"
           >
             {#if theme === 'light'}
@@ -263,24 +316,23 @@
             {/if}
           </button>
         {:else}
-          <div class="flex items-center p-1 bg-muted/40 border border-border/40 rounded-full w-full">
-            <button onclick={() => setTheme('light')} class="flex-1 flex items-center justify-center p-1.5 rounded-full transition-all {theme === 'light' ? 'bg-background shadow-sm text-foreground' : 'text-zinc-500 hover:text-foreground'}" title="Light">
+          <div class="flex items-center p-1 bg-muted/60 border border-border/70 rounded-full w-full">
+            <button onclick={() => setTheme('light')} class="flex-1 flex items-center justify-center p-1.5 rounded-full transition-all {theme === 'light' ? 'bg-card shadow-xs text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}" title="Light">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
             </button>
-            <button onclick={() => setTheme('system')} class="flex-1 flex items-center justify-center p-1.5 rounded-full transition-all {theme === 'system' ? 'bg-background shadow-sm text-foreground' : 'text-zinc-500 hover:text-foreground'}" title="System">
+            <button onclick={() => setTheme('system')} class="flex-1 flex items-center justify-center p-1.5 rounded-full transition-all {theme === 'system' ? 'bg-card shadow-xs text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}" title="System">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             </button>
-            <button onclick={() => setTheme('dark')} class="flex-1 flex items-center justify-center p-1.5 rounded-full transition-all {theme === 'dark' ? 'bg-background shadow-sm text-foreground' : 'text-zinc-500 hover:text-foreground'}" title="Dark">
+            <button onclick={() => setTheme('dark')} class="flex-1 flex items-center justify-center p-1.5 rounded-full transition-all {theme === 'dark' ? 'bg-card shadow-xs text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}" title="Dark">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
             </button>
           </div>
         {/if}
       </div>
 
-
       <button 
         onclick={handleLogout}
-        class="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 {(isCollapsed && !isMobileMenuOpen) ? 'justify-center' : ''}"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all duration-150 {(isCollapsed && !isMobileMenuOpen) ? 'justify-center' : ''}"
         title="Logout"
       >
         <HugeiconsIcon icon={Logout01Icon} size={16} class="shrink-0 text-muted-foreground" />
@@ -291,10 +343,10 @@
     </div>
   </aside>
 
-  <!-- Main Content Panel -->
-  <main class="flex-1 bg-background md:border md:border-border md:rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.03)] flex flex-col overflow-hidden">
+  <!-- Main Content Panel: Pure Surface Card with Hairline Border -->
+  <main class="flex-1 bg-card md:border md:border-border/80 md:rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden">
     <!-- Main Content Header -->
-    <header class="h-14 px-4 md:px-6 flex items-center justify-between shrink-0 select-none bg-background border-b md:border-b-0 border-border/50">
+    <header class="h-14 px-4 md:px-6 flex items-center justify-between shrink-0 select-none bg-card border-b border-border/60">
       <!-- Mobile hamburger -->
       <button 
         onclick={() => isMobileMenuOpen = !isMobileMenuOpen}
@@ -306,8 +358,8 @@
       <!-- Breadcrumbs -->
       <div class="flex items-center gap-2 text-[13px] text-muted-foreground">
         <span>{crumbs[0]}</span>
-        <span class="text-border/80">/</span>
-        <span class="font-semibold text-foreground flex items-center gap-1.5">
+        <span class="text-border">/</span>
+        <span class="font-medium text-foreground flex items-center gap-1.5">
           {#if crumbs[1] === 'Personal Info'}
             <HugeiconsIcon icon={UserIcon} size={14} class="text-muted-foreground shrink-0" />
           {/if}
@@ -317,7 +369,7 @@
     </header>
 
     <!-- Main Content Page Frame -->
-    <div class="flex-1 overflow-y-auto bg-background relative px-2 md:px-0">
+    <div class="flex-1 overflow-y-auto bg-card relative px-2 md:px-0">
       {@render children()}
     </div>
   </main>

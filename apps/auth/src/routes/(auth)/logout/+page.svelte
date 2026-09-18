@@ -3,10 +3,12 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { userStore } from '$lib/stores/user.svelte';
+  import { clearClientCookie } from '@materio/config';
 
   onMount(() => {
     // Clear tokens and state
     userStore.logout();
+    clearClientCookie('materio_token');
     
     const callback = $page.url.searchParams.get('callback');
     

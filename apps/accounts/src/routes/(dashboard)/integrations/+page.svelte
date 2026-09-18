@@ -60,7 +60,7 @@
   <div class="flex flex-col sm:flex-row sm:items-center items-start justify-between gap-4 border-b border-border/60 pb-6">
     <div>
       <h1 class="text-2xl font-bold tracking-tight text-foreground">Integrations</h1>
-      <p class="text-sm text-muted-foreground mt-1">Connect your account with external services like Google Drive to enable cloud storage features.</p>
+      <p class="text-sm text-muted-foreground mt-1">Connect your Materio ID with external services like Google Drive to enable cloud storage features.</p>
     </div>
   </div>
 

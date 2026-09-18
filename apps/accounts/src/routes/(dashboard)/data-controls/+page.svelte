@@ -284,7 +284,7 @@
     >
       <p>
         We believe your data belongs to you. We only collect the information
-        needed to keep your account secure and provide you with the best
+        needed to keep your Materio ID secure and provide you with the best
         possible experience.
       </p>
       <p>
@@ -293,7 +293,7 @@
         explicit consent.
       </p>
       <p>
-        If you want to permanently erase your account and all associated data,
+        If you want to permanently erase your Materio ID and all associated data,
         you can do that from the
         <a href="/security" class="text-primary hover:underline font-medium"
           >Security</a

@@ -1,8 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { supabaseAdmin, verifyToken, generateToken, generateHandoffCode, storeHandoffCode, verifyTOTP } from '$lib/server/utils';
+import { setSessionCookie } from '@materio/config';
 import crypto from 'node:crypto';
 
-export async function POST({ request, getClientAddress }) {
+export async function POST({ request, getClientAddress, cookies, url }: any) {
   try {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,6 +48,9 @@ export async function POST({ request, getClientAddress }) {
       });
 
       await storeHandoffCode(handoffCode, finalToken, user.id, userAgent, ip);
+
+      // Set shared cross-app session cookie
+      setSessionCookie(cookies, finalToken, url.origin);
 
       return json({
         message: 'Login successful',

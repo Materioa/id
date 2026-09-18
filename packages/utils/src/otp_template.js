@@ -40,7 +40,7 @@ function getOTPTemplate(otp, type, email) {
     
     <!-- Footer -->
     <div style="text-align:center;font-size:11px;color:#cbd5e1; margin-top: 24px;">
-      Sent to ${email} • Materio Account Services
+      Sent to ${email} • Materio ID Services
     </div>
   </div>
 </body>

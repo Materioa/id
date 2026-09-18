@@ -30,7 +30,7 @@ You have two options:
 
 ### Option A: Dynamic Client Registration (Recommended)
 
-No Materio account needed. Register programmatically:
+No Materio ID needed. Register programmatically:
 
 ```bash
 curl -X POST https://accounts.getmaterio.app/api/v2/auth?action=oauth_register_app \

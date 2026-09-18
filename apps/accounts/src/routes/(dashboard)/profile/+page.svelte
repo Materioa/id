@@ -570,10 +570,10 @@
         <div class="pt-8">
           <div class="border-t border-border/50 pt-6">
             <h3 class="font-bold text-[15px] text-foreground mb-2">
-              Account Recovery Key
+              Materio ID Recovery Key
             </h3>
             <p class="text-xs text-muted-foreground mb-4">
-              Your recovery key is used to regain access to your account if you
+              Your recovery key is used to regain access to your Materio ID if you
               forget your password. Keep it secure and private.
             </p>
 

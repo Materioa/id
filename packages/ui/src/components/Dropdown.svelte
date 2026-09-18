@@ -45,20 +45,20 @@
   <button
     id={id}
     type="button"
-    class="w-full flex items-center justify-between px-4 py-3 bg-background border border-border rounded-xl shadow-sm text-left focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all {disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-border/80 active:scale-[0.98] cursor-pointer'}"
+    class="w-full flex items-center justify-between px-3.5 py-2.5 bg-background border border-border/80 rounded-lg shadow-sm text-left focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm {disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-border active:scale-[0.99] cursor-pointer'}"
     onclick={toggle}
     {disabled}
   >
     <span class="block truncate {selectedOption ? 'text-foreground' : 'text-muted-foreground'}">
       {selectedOption ? selectedOption.label : placeholder}
     </span>
-    <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform duration-200 {isOpen ? 'rotate-180' : ''}" />
+    <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform duration-150 {isOpen ? 'rotate-180' : ''}" />
   </button>
 
   {#if isOpen}
     <div 
-      class="absolute z-50 w-full mt-2 bg-card border border-border rounded-xl shadow-lg overflow-hidden max-h-60 overflow-y-auto"
-      transition:fly={{ y: -10, duration: 200 }}
+      class="absolute z-50 w-full mt-1.5 bg-card border border-border/80 rounded-lg shadow-md overflow-hidden max-h-60 overflow-y-auto"
+      transition:fly={{ y: -6, duration: 150 }}
     >
       <div class="py-1">
         {#each options as option}

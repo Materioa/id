@@ -44,12 +44,12 @@ function getExportStartedTemplate(email: string, displayName: string) {
         <strong>Estimated time:</strong> Your download link will be emailed to you within 24 hours. We'll send another email when it's ready.
       </p>
       
-      <p style="text-align: center; color: #94a3b8; font-size: 12px; margin-bottom: 0;">Request made on ${timestamp}<br>If you didn't request this, please secure your account immediately.</p>
+      <p style="text-align: center; color: #94a3b8; font-size: 12px; margin-bottom: 0;">Request made on ${timestamp}<br>If you didn't request this, please secure your Materio ID immediately.</p>
     </div>
     
     <!-- Footer -->
     <div style="text-align:center;font-size:11px;color:#cbd5e1; margin-top: 24px;">
-      Sent to ${escapeHtml(email)} • Materio Account Services
+      Sent to ${escapeHtml(email)} • Materio ID Services
     </div>
   </div>
 </body>
@@ -101,12 +101,12 @@ function getExportReadyTemplate(email: string, displayName: string, downloadUrl:
         <strong>Link expires in 24 hours.</strong> Please download your data before the link expires. After that, you'll need to request a new export.
       </p>
       
-      <p style="text-align: center; color: #94a3b8; font-size: 12px; margin-bottom: 0;">Your exported data is encrypted in transit.<br>If you didn't request this, please secure your account immediately.</p>
+      <p style="text-align: center; color: #94a3b8; font-size: 12px; margin-bottom: 0;">Your exported data is encrypted in transit.<br>If you didn't request this, please secure your Materio ID immediately.</p>
     </div>
     
     <!-- Footer -->
     <div style="text-align:center;font-size:11px;color:#cbd5e1; margin-top: 24px;">
-      Sent to ${escapeHtml(email)} • Materio Account Services
+      Sent to ${escapeHtml(email)} • Materio ID Services
     </div>
   </div>
 </body>

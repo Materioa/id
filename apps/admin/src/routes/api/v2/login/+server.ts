@@ -9,9 +9,10 @@ import {
   consumeHandoffCode,
   verifyToken 
 } from '$lib/server/utils';
+import { setSessionCookie } from '@materio/config';
 import crypto from 'node:crypto';
 
-export async function POST({ request, getClientAddress }: RequestEvent) {
+export async function POST({ request, getClientAddress, cookies, url }: RequestEvent) {
   try {
     const body: any = await request.json().catch(() => ({}));
     const { username, password, code, action } = body;
@@ -44,6 +45,8 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
           hasAdminPrivileges: false 
         }, { status: 403 });
       }
+
+      setSessionCookie(cookies, result.token, url.origin);
 
       return json({
         message: 'Handoff successful',

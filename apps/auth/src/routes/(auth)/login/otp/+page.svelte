@@ -1,7 +1,16 @@
+<svelte:head>
+  <title>Login with Email - Materio ID</title>
+</svelte:head>
+
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { HugeiconsIcon } from '@hugeicons/svelte';
-  import { ShieldAlertIcon } from '@hugeicons/core-free-icons';
+  import { page } from '$app/stores';
+  import { getAppUrls } from '@materio/config';
+  import AuthCard from '$lib/components/AuthCard.svelte';
+  import LineArtBackground from '$lib/components/LineArtBackground.svelte';
+  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+  import BudLogo from '$lib/components/BudLogo.svelte';
+  import { ShieldAlert, ArrowLeft } from 'lucide-svelte';
   
   let email = $state('');
   let otpCode = $state('');
@@ -51,6 +60,7 @@
 
       step = 'otp';
       successMsg = 'A verification code has been sent to your email.';
+      setTimeout(() => otpInputs[0]?.focus(), 50);
     } catch (e: any) {
       errorMsg = e.message;
     } finally {
@@ -97,7 +107,17 @@
         localStorage.setItem('token', data.token);
       }
       
-      goto('/overview');
+      const callback = $page.url.searchParams.get('callback');
+      if (callback) {
+        try {
+          const cbUrl = new URL(callback);
+          if (data.handoffCode) cbUrl.searchParams.set('code', data.handoffCode);
+          window.location.href = cbUrl.toString();
+          return;
+        } catch {}
+      }
+      const appUrls = getAppUrls(typeof window !== 'undefined' ? window.location.origin : undefined);
+      window.location.href = `${appUrls.accounts}/overview`;
     } catch (e: any) {
       errorMsg = e.message;
     } finally {
@@ -107,184 +127,197 @@
 
   function handleOtpInput(e: Event, index: number) {
     const input = e.target as HTMLInputElement;
-    const val = input.value;
+    const value = input.value;
     
-    // Allow only numbers
-    if (!/^\d*$/.test(val)) {
-      otpArray[index] = '';
-      return;
-    }
-    
-    otpArray[index] = val;
-    
-    // Move to next input
-    if (val && index < 5) {
-      otpInputs[index + 1]?.focus();
+    if (value.length > 0) {
+      otpArray[index] = value[value.length - 1];
+      if (index < 5 && otpInputs[index + 1]) {
+        otpInputs[index + 1].focus();
+      }
     }
   }
 
   function handleOtpKeydown(e: KeyboardEvent, index: number) {
     if (e.key === 'Backspace' && !otpArray[index] && index > 0) {
-      otpInputs[index - 1]?.focus();
+      otpInputs[index - 1].focus();
     }
   }
 
   function handleOtpPaste(e: ClipboardEvent) {
     e.preventDefault();
-    const pastedData = e.clipboardData?.getData('text/plain')?.trim();
-    if (!pastedData || !/^\d+$/.test(pastedData)) return;
-
-    for (let i = 0; i < Math.min(6, pastedData.length); i++) {
-      otpArray[i] = pastedData[i];
+    const pastedData = e.clipboardData?.getData('text').trim() || '';
+    if (/^\d{6}$/.test(pastedData)) {
+      for (let i = 0; i < 6; i++) {
+        otpArray[i] = pastedData[i];
+      }
+      otpInputs[5]?.focus();
     }
-    
-    const nextFocusIndex = Math.min(5, pastedData.length);
-    otpInputs[nextFocusIndex]?.focus();
   }
 </script>
 
-{#if isSuspended}
-  <div class="h-screen w-full bg-background text-foreground flex flex-col items-center justify-center p-6 relative select-none font-sans">
-    <!-- Top Left Logo -->
-    <div class="absolute top-6 left-6 flex items-center">
-      <img src="/logo-wordmark.webp" alt="Materio" class="h-6 object-contain" />
-    </div>
+<style>
+  .auth-viewport {
+    background-color: #f7f7f2;
+    color: #0e0f0c;
+  }
+  :global(.dark) .auth-viewport {
+    background-color: #121310;
+    color: #f4f4ee;
+  }
+</style>
 
-    <!-- Suspension Notice -->
-    <div class="max-w-md w-full text-center space-y-6 animate-in fade-in duration-200">
-      <div class="mx-auto w-12 h-12 text-destructive flex items-center justify-center">
-        <HugeiconsIcon icon={ShieldAlertIcon} size={36} />
-      </div>
+<div class="auth-viewport relative min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 transition-colors duration-500 overflow-x-hidden font-sans">
+  
+  <LineArtBackground />
 
-      <div class="space-y-3">
-        <h1 class="text-2xl font-bold tracking-tight text-foreground">
-          Account Suspended
-        </h1>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          Your account has been suspended for <span class="font-medium text-foreground">{suspensionReason}</span> and thereby access has been revoked.
-        </p>
-      </div>
-
-      <div class="flex items-center justify-center gap-3 pt-2">
-        <a 
-          href="mailto:support@getmaterio.app?subject={encodeURIComponent('Account Suspension Appeal - ' + email)}&body={encodeURIComponent('Hello Materio Team,\n\nMy account (' + email + ') has been suspended for:\n' + suspensionReason + '\n\nI believe this was a mistake because:\n[Please explain why your account should be reinstated]\n\nThank you.')}"
-          class="btn-base btn-primary"
-        >
-          File an Appeal
-        </a>
-        <button
-          type="button"
-          onclick={resetOtpLogin}
-          class="btn-base btn-secondary"
-        >
-          Sign Out
-        </button>
-      </div>
-    </div>
-  </div>
-{:else}
-<div class="min-h-screen w-full bg-background flex flex-col items-center pt-[10vh] px-4 font-sans relative pb-10">
-  <!-- Top Left Logo -->
-  <div class="absolute top-6 left-6 flex items-center gap-2 select-none cursor-pointer" onclick={() => goto('/login')}>
-    <img src="/logo-wordmark.webp" alt="Materio" class="h-6 object-contain" />
-  </div>
-
-  <div class="w-full max-w-sm mt-12 mb-8 text-center">
-    <h1 class="text-3xl font-bold text-foreground mb-3 tracking-tight">Login with Email</h1>
-    <p class="text-muted-foreground text-[15px]">
-      {step === 'email' ? 'Enter your email to receive a verification code.' : 'Enter the 6-digit code sent to your email.'}
-    </p>
-  </div>
-
-  <div class="w-full max-w-[360px]">
-    {#if errorMsg}
-      <div class="mb-4 p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-lg text-center font-medium">
-        {errorMsg}
-      </div>
-    {/if}
-
-    {#if successMsg && step === 'otp'}
-      <div class="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-sm rounded-lg text-center font-medium">
-        {successMsg}
-      </div>
-    {/if}
-
-    {#if step === 'email'}
-      <form onsubmit={handleSendOtp} class="space-y-4">
-        <div class="space-y-1">
-          <input 
-            id="email"
-            type="email" 
-            bind:value={email}
-            required
-            placeholder="Email address"
-            class="w-full bg-transparent border border-border/80 text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-md text-[15px]"
-          />
-        </div>
-
-        <button 
-          type="submit" 
-          disabled={isLoading}
-          class="btn-base btn-primary w-full py-3.5 mt-4"
-        >
-          {isLoading ? 'Sending...' : 'Send Verification Code'}
-        </button>
-      </form>
-    {:else}
-      <form onsubmit={handleVerifyOtp} class="space-y-4">
-        <div class="flex items-center justify-center gap-2">
-          {#each otpArray as digit, i}
-            <input 
-              type="text" 
-              bind:value={otpArray[i]}
-              bind:this={otpInputs[i]}
-              oninput={(e) => handleOtpInput(e, i)}
-              onkeydown={(e) => handleOtpKeydown(e, i)}
-              onpaste={handleOtpPaste}
-              required
-              maxlength="1"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              class="w-12 h-14 bg-transparent border border-border/80 text-foreground text-center text-xl font-medium outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-xl shadow-sm border-b-[3px]"
-            />
-          {/each}
-        </div>
-
-        <button 
-          type="submit" 
-          disabled={isLoading}
-          class="btn-base btn-primary w-full py-3.5 mt-4"
-        >
-          {isLoading ? 'Verifying...' : 'Sign In'}
-        </button>
-        
-        <div class="text-center mt-4">
-          <button 
-            type="button" 
-            class="text-sm text-primary hover:underline"
-            onclick={() => { step = 'email'; errorMsg = ''; }}
-          >
-            Use a different email
-          </button>
-        </div>
-      </form>
-    {/if}
-
-    <div class="my-8 relative flex items-center justify-center">
-      <div class="absolute inset-0 flex items-center">
-        <div class="w-full border-t border-border/60"></div>
-      </div>
-      <span class="relative bg-background px-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Or</span>
-    </div>
-
-    <div class="space-y-3">
-      <a 
-        href="/login"
-        class="w-full flex items-center justify-center gap-3 bg-transparent border border-border hover:bg-muted/50 py-3 rounded-md text-foreground transition-colors text-[15px] font-medium"
-      >
-        <span>Back to Password Login</span>
+  <!-- Top Navigation Controls -->
+  <header class="fixed top-5 left-0 right-0 px-6 flex items-center justify-between z-20 pointer-events-none">
+    <div class="pointer-events-auto select-none">
+      <a href="/login" class="flex items-center gap-2 group">
+        <img src="/logo-wordmark.webp" alt="Materio" class="h-6 w-auto object-contain opacity-85 group-hover:opacity-100 transition-opacity" />
       </a>
     </div>
-  </div>
+    
+    <div class="pointer-events-auto flex items-center gap-2">
+      <ThemeToggle />
+    </div>
+  </header>
+
+  <!-- Centered Card -->
+  <main class="relative z-10 w-full flex items-center justify-center my-auto pt-12 pb-6">
+    <AuthCard maxWidth="max-w-[460px]">
+      {#if isSuspended}
+        <div class="text-center space-y-5">
+          <div class="mx-auto w-12 h-12 text-destructive flex items-center justify-center bg-destructive/10 rounded-full">
+            <ShieldAlert class="w-6 h-6" />
+          </div>
+
+          <div class="space-y-2">
+            <h1 class="text-2xl font-serif font-normal tracking-tight text-foreground">
+              Materio ID Suspended
+            </h1>
+            <p class="text-sm text-muted-foreground leading-relaxed">
+              Your account has been suspended for <span class="font-medium text-foreground">{suspensionReason}</span>.
+            </p>
+          </div>
+
+          <div class="flex items-center justify-center gap-3 pt-3">
+            <button
+              type="button"
+              onclick={resetOtpLogin}
+              class="px-5 py-2.5 rounded-full bg-black/5 dark:bg-white/10 text-foreground text-xs sm:text-sm font-medium hover:bg-black/10 dark:hover:bg-white/15 transition-colors cursor-pointer"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+
+      {:else}
+        <!-- Card Header with BudLogo -->
+        <div class="flex flex-col items-center text-center">
+          <div class="w-16 h-16 flex items-center justify-center text-foreground mb-4 select-none">
+            <BudLogo class="w-16 h-16 text-foreground" />
+          </div>
+
+          <h1 class="text-3xl font-serif font-normal text-foreground tracking-tight mb-2">
+            Sign In with Email
+          </h1>
+          <p class="text-muted-foreground text-[14px] leading-snug mb-7 max-w-[320px]">
+            {step === 'email' ? 'Enter your email to receive a verification code.' : 'Enter the 6-digit code sent to your email.'}
+          </p>
+        </div>
+
+        {#if errorMsg}
+          <div class="mb-5 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs sm:text-sm text-center font-medium leading-relaxed animate-in fade-in duration-150">
+            {errorMsg}
+          </div>
+        {/if}
+
+        {#if successMsg && step === 'otp'}
+          <div class="mb-5 p-3 rounded-xl bg-[#5b6f00]/10 dark:bg-[#7a940c]/20 border border-[#5b6f00]/20 text-[#5b6f00] dark:text-[#b2c248] text-xs sm:text-sm text-center font-medium leading-relaxed animate-in fade-in duration-150">
+            {successMsg}
+          </div>
+        {/if}
+
+        {#if step === 'email'}
+          <form onsubmit={handleSendOtp} class="space-y-4">
+            <input 
+              id="email"
+              type="email" 
+              bind:value={email}
+              required
+              placeholder="name@company.com"
+              class="w-full h-12 px-4 rounded-[14px] bg-black/[0.03] dark:bg-white/[0.05] border border-black/10 dark:border-white/15 focus:border-[#7a940c] text-foreground placeholder:text-muted-foreground text-[14px] outline-none ring-2 ring-transparent focus:ring-[#7a940c]/25 transition-all font-sans"
+            />
+
+            <button 
+              type="submit" 
+              disabled={isLoading}
+              class="w-full h-12 rounded-[14px] bg-[#5b6f00] dark:bg-[#7a940c] hover:bg-[#4c5c00] dark:hover:bg-[#8ba80e] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
+            >
+              {#if isLoading}
+                <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Sending Code...</span>
+              {:else}
+                <span>Send Verification Code</span>
+              {/if}
+            </button>
+          </form>
+        {:else}
+          <form onsubmit={handleVerifyOtp} class="space-y-4">
+            <div class="flex items-center justify-center gap-2">
+              {#each otpArray as digit, i}
+                <input 
+                  type="text" 
+                  bind:value={otpArray[i]}
+                  bind:this={otpInputs[i]}
+                  oninput={(e) => handleOtpInput(e, i)}
+                  onkeydown={(e) => handleOtpKeydown(e, i)}
+                  onpaste={handleOtpPaste}
+                  required
+                  maxlength="1"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  class="w-11 h-13 rounded-[12px] bg-black/[0.03] dark:bg-white/[0.05] border border-black/10 dark:border-white/15 focus:border-[#7a940c] text-foreground text-center text-xl font-mono outline-none ring-2 ring-transparent focus:ring-[#7a940c]/25 transition-all"
+                />
+              {/each}
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={isLoading}
+              class="w-full h-12 rounded-[14px] bg-[#5b6f00] dark:bg-[#7a940c] hover:bg-[#4c5c00] dark:hover:bg-[#8ba80e] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
+            >
+              {#if isLoading}
+                <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Signing In...</span>
+              {:else}
+                <span>Sign In</span>
+              {/if}
+            </button>
+            
+            <div class="text-center pt-1">
+              <button 
+                type="button" 
+                class="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                onclick={() => { step = 'email'; errorMsg = ''; }}
+              >
+                Use a different email
+              </button>
+            </div>
+          </form>
+        {/if}
+
+        <div class="mt-6 pt-5 border-t border-black/[0.06] dark:border-white/[0.07] text-center">
+          <a 
+            href="/login"
+            class="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5"
+          >
+            <ArrowLeft class="w-3.5 h-3.5" />
+            <span>Back to Materio ID Login</span>
+          </a>
+        </div>
+      {/if}
+    </AuthCard>
+  </main>
 </div>
-{/if}
