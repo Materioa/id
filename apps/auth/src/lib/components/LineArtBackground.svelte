@@ -1,16 +1,7 @@
 <script lang="ts">
-  // High-fidelity vector line art with graceful bezier loops and continuous arcs
-  // Inspired by the Granola reference UI, fully adapting between dark & light modes.
+  // Subtle geometric line art — every line spans fully edge-to-edge
+  // Mix of straight lines and gentle arcs with gradient fading
 </script>
-
-<style>
-  .line-art-path {
-    stroke: rgba(14, 15, 12, 0.055);
-  }
-  :global(.dark) .line-art-path {
-    stroke: rgba(255, 255, 255, 0.075);
-  }
-</style>
 
 <div class="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none" aria-hidden="true">
   <svg 
@@ -20,58 +11,87 @@
     xmlns="http://www.w3.org/2000/svg"
     preserveAspectRatio="xMidYMid slice"
   >
-    <!-- 1. Sweeping upper-left loop that swoops down behind the left side of the card and exits cleanly -->
+    <defs>
+      <linearGradient id="f1" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1600" y2="1000">
+        <stop offset="0%" stop-color="var(--line-color)" stop-opacity="0" />
+        <stop offset="15%" stop-color="var(--line-color)" stop-opacity="0.09" />
+        <stop offset="38%" stop-color="var(--line-color)" stop-opacity="0.02" />
+        <stop offset="58%" stop-color="var(--line-color)" stop-opacity="0.1" />
+        <stop offset="80%" stop-color="var(--line-color)" stop-opacity="0.03" />
+        <stop offset="100%" stop-color="var(--line-color)" stop-opacity="0" />
+      </linearGradient>
+
+      <linearGradient id="f2" gradientUnits="userSpaceOnUse" x1="1600" y1="0" x2="0" y2="1000">
+        <stop offset="0%" stop-color="var(--line-color)" stop-opacity="0" />
+        <stop offset="18%" stop-color="var(--line-color)" stop-opacity="0.08" />
+        <stop offset="42%" stop-color="var(--line-color)" stop-opacity="0.02" />
+        <stop offset="62%" stop-color="var(--line-color)" stop-opacity="0.09" />
+        <stop offset="82%" stop-color="var(--line-color)" stop-opacity="0.03" />
+        <stop offset="100%" stop-color="var(--line-color)" stop-opacity="0" />
+      </linearGradient>
+
+      <linearGradient id="f3" gradientUnits="userSpaceOnUse" x1="0" y1="500" x2="1600" y2="500">
+        <stop offset="0%" stop-color="var(--line-color)" stop-opacity="0" />
+        <stop offset="12%" stop-color="var(--line-color)" stop-opacity="0.07" />
+        <stop offset="35%" stop-color="var(--line-color)" stop-opacity="0.02" />
+        <stop offset="55%" stop-color="var(--line-color)" stop-opacity="0.1" />
+        <stop offset="78%" stop-color="var(--line-color)" stop-opacity="0.03" />
+        <stop offset="100%" stop-color="var(--line-color)" stop-opacity="0" />
+      </linearGradient>
+
+      <linearGradient id="f4" gradientUnits="userSpaceOnUse" x1="800" y1="-200" x2="800" y2="1200">
+        <stop offset="0%" stop-color="var(--line-color)" stop-opacity="0" />
+        <stop offset="20%" stop-color="var(--line-color)" stop-opacity="0.08" />
+        <stop offset="45%" stop-color="var(--line-color)" stop-opacity="0.02" />
+        <stop offset="68%" stop-color="var(--line-color)" stop-opacity="0.09" />
+        <stop offset="90%" stop-color="var(--line-color)" stop-opacity="0.03" />
+        <stop offset="100%" stop-color="var(--line-color)" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+
+    <!-- 1. Diagonal: top-left to bottom-right (steep) -->
+    <line x1="-100" y1="-80" x2="640" y2="1120" stroke="url(#f1)" stroke-width="1" vector-effect="non-scaling-stroke" />
+
+    <!-- 2. Diagonal: bottom-left to upper-right (wide) -->
+    <line x1="-100" y1="880" x2="1700" y2="120" stroke="url(#f2)" stroke-width="1" vector-effect="non-scaling-stroke" />
+
+    <!-- 3. Steep line from upper-right to lower-left -->
+    <line x1="1300" y1="-80" x2="280" y2="1120" stroke="url(#f4)" stroke-width="1" vector-effect="non-scaling-stroke" />
+
+    <!-- 4. Near-horizontal gentle slope left to right -->
+    <line x1="-100" y1="340" x2="1700" y2="680" stroke="url(#f3)" stroke-width="1" vector-effect="non-scaling-stroke" />
+
+    <!-- 5. Steep right-side diagonal -->
+    <line x1="1060" y1="1120" x2="1700" y2="-80" stroke="url(#f2)" stroke-width="1" vector-effect="non-scaling-stroke" />
+
+    <!-- 6. Wide gentle arc: left edge sweeping down to bottom -->
     <path 
-      class="line-art-path"
-      d="M -160 180 C 140 -20, 380 40, 460 260 C 530 460, 360 620, 180 560 C 20 500, -10 300, 160 170 C 340 30, 680 80, 860 320 C 980 490, 920 740, 740 840 C 560 930, 320 890, 100 760 C -40 680, -90 860, -180 1080" 
-      stroke-width="1.15" 
-      stroke-linecap="round"
+      d="M -100 -60 C 220 320, 180 660, -100 1060"
+      stroke="url(#f4)" stroke-width="1" stroke-linecap="round"
       vector-effect="non-scaling-stroke" 
     />
 
-    <!-- 2. Large right-side elliptical loop with double wrap -->
+    <!-- 7. Wide gentle arc: top to right edge -->
     <path 
-      class="line-art-path"
-      d="M 1780 100 C 1420 40, 1260 240, 1280 480 C 1300 720, 1520 760, 1620 580 C 1680 420, 1520 220, 1260 210 C 1020 200, 940 440, 1020 680 C 1100 900, 1360 960, 1780 900" 
-      stroke-width="1.1" 
-      stroke-linecap="round"
+      d="M 400 -80 C 700 240, 1200 280, 1700 60"
+      stroke="url(#f3)" stroke-width="1" stroke-linecap="round"
       vector-effect="non-scaling-stroke" 
     />
 
-    <!-- 3. Elegant diagonal ribbon traversing from bottom-left through center to top-right -->
+    <!-- 8. Wide gentle arc: bottom-left to bottom-right -->
     <path 
-      class="line-art-path"
-      d="M -180 880 C 180 860, 440 720, 680 500 C 920 280, 1220 140, 1780 90" 
-      stroke-width="1.2" 
-      stroke-linecap="round"
-      vector-effect="non-scaling-stroke" 
-    />
-
-    <!-- 4. Gentle sweeping curve across the top canvas -->
-    <path 
-      class="line-art-path"
-      d="M 160 -120 C 480 180, 820 210, 1140 60 C 1320 -40, 1520 -10, 1780 50" 
-      stroke-width="1.0" 
-      stroke-linecap="round"
-      vector-effect="non-scaling-stroke" 
-    />
-
-    <!-- 5. Lower canvas looping ribbon weaving behind card bottom -->
-    <path 
-      class="line-art-path"
-      d="M -180 620 C 240 540, 480 640, 620 800 C 760 960, 1020 980, 1240 860 C 1420 750, 1580 820, 1780 930" 
-      stroke-width="1.1" 
-      stroke-linecap="round"
-      vector-effect="non-scaling-stroke" 
-    />
-
-    <!-- 6. Soft undulating wave connecting left and right horizons -->
-    <path 
-      class="line-art-path"
-      d="M -180 420 C 180 260, 520 540, 800 380 C 1080 220, 1360 480, 1780 340" 
-      stroke-width="1.0" 
-      stroke-linecap="round"
+      d="M -100 760 C 400 600, 1100 640, 1700 860"
+      stroke="url(#f1)" stroke-width="1" stroke-linecap="round"
       vector-effect="non-scaling-stroke" 
     />
   </svg>
 </div>
+
+<style>
+  div {
+    --line-color: rgba(14, 15, 12, 0.9);
+  }
+  :global(.dark) div {
+    --line-color: rgba(255, 255, 255, 0.9);
+  }
+</style>

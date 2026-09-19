@@ -41,6 +41,7 @@
   class="relative w-full"
   role="combobox"
   aria-expanded={isOpen}
+  aria-controls="{id}-listbox"
 >
   <button
     id={id}
