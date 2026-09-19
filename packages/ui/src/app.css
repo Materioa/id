@@ -1,13 +1,7 @@
-/* Google Fonts Fallbacks */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Instrument+Sans:ital,wght@0,400..600;1,400..600&family=DM+Sans:ital,opsz,wght@0,9..40,300..600;1,9..40,300..600&display=swap');
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ══════════════════════════════════════════════════════════════
-   Granola Font Declarations
-   ══════════════════════════════════════════════════════════════ */
-
-/* Quadrant Notepad (Editorial Display Serif) */
 @font-face {
   font-family: 'Quadrant';
   src: local('Quadrant'), local('Quadrant Notepad'), local('Quadrant-Regular'),
@@ -28,7 +22,6 @@
   font-display: swap;
 }
 
-/* KMR Melange Grotesk (Humanist UI Face) */
 @font-face {
   font-family: 'Melange';
   src: local('Melange'), local('Melange-Regular'), local('KMR Melange Grotesk'), local('KMRMelangeGrotesk-Regular'),
@@ -89,7 +82,6 @@
   font-display: swap;
 }
 
-/* Open Runde (Humanist Rounded Face) */
 @font-face {
   font-family: 'OpenRunde';
   src: local('OpenRunde'), local('Open Runde'), local('OpenRunde-Regular'),
@@ -177,6 +169,7 @@
   --font-melange: 'OpenRunde', 'Open Runde', 'Melange', 'KMR Melange Grotesk', 'Instrument Sans', 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-quadrant: 'Quadrant', 'Quadrant Notepad', 'Playfair Display', 'Lora', ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-serif: 'Quadrant', 'Quadrant Notepad', 'Playfair Display', 'Lora', ui-serif, Georgia, serif;
+  --font-mono: 'Cascadia Mono', 'Cascadia Code', 'Monaco', 'SF Mono', 'Menlo', monospace;
   --font-apple-system-system-ui: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
   --font-system-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
@@ -218,7 +211,6 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
-  /* Granola Specific Tokens */
   --color-parchment-canvas: #f7f7f2;
   --color-pure-surface: #ffffff;
   --color-midnight-ink: #0e0f0c;
@@ -229,16 +221,15 @@
   --color-ash-border: #e3e3e3;
   --color-stone-border: #d5d5d2;
   --color-fog-surface: #eaebe5;
-  --color-olive-press: #b2c248;
-  --color-forest-cta: #5b6f00;
-  --color-fern-border: #788c15;
-  --color-sprout-tint: #e5eacd;
+  --color-olive-press: #e18b5b;
+  --color-forest-cta: #a34914;
+  --color-fern-border: #c05a1e;
+  --color-sprout-tint: #f3d9ca;
   --color-twitter-blue: #1d9bf0;
   --color-link-cobalt: #006fd6;
   --color-ember-fill: #e95d3d;
   --color-ember-border: #bd4a30;
 
-  /* Named Radii from DESIGN.md */
   --radius-cards: 8px;
   --radius-inputs: 8px;
   --radius-buttons: 9999px;
@@ -248,7 +239,6 @@
   --radius-cardslarge: 12px;
   --radius-decorativeblobs: 64px;
 
-  /* Radius Scale */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
@@ -256,7 +246,6 @@
   --radius-2xl: 16px;
   --radius-full: 9999px;
 
-  /* Shadows from DESIGN.md */
   --shadow-subtle: rgba(0, 0, 0, 0.03) 0px 0px 2px 0px inset;
   --shadow-xl: rgba(0, 0, 0, 0.03) 0px 0px 36px 0px;
   --shadow-xl-2: rgba(0, 0, 0, 0.15) 0px 8px 48px 0px;
@@ -271,55 +260,53 @@
     --card-foreground: 80 11% 5%;       /* #0e0f0c Midnight Ink */
     --popover: 0 0% 100%;               /* #ffffff Pure Surface */
     --popover-foreground: 80 11% 5%;
-    --primary: 71 100% 22%;             /* #5b6f00 Forest CTA */
+    --primary: 22 78% 36%;              /* #a34914 Rust/Terracotta CTA */
     --primary-foreground: 60 100% 98%;  /* #fcfcf8 Crisp Warm White */
     --secondary: 70 8% 91%;             /* #eaebe5 Fog Surface */
     --secondary-foreground: 80 11% 5%;
     --muted: 70 8% 91%;                 /* #eaebe5 Fog Surface */
     --muted-foreground: 60 2% 44%;      /* #72726e Slate */
-    --accent: 70 41% 86%;               /* #e5eacd Sprout Tint */
-    --accent-foreground: 71 100% 22%;   /* #5b6f00 */
+    --accent: 22 66% 87%;               /* #f3d9ca Rust Tint */
+    --accent-foreground: 22 78% 36%;    /* #a34914 */
     --destructive: 11 80% 58%;          /* #e95d3d Ember Fill */
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 89%;                 /* #e3e3e3 Ash Border */
     --input: 60 3% 83%;                 /* #d5d5d2 Stone Border */
-    --ring: 70 74% 31%;                 /* #788c15 Fern Border */
+    --ring: 22 73% 44%;                 /* #c05a1e Rust Border */
     --radius: 0.5rem;                   /* 8px */
 
-    /* Surface tokens */
     --surface-canvas: #f7f7f2;
     --surface-card: #ffffff;
     --surface-tinted: #eaebe5;
-    --surface-accent-tint: #e5eacd;
+    --surface-accent-tint: #f3d9ca;
   }
 
   .dark {
-    /* Granola Dark Theme — Nocturnal Study / Warm Dark Moleskine */
     --background: 80 9% 7%;             /* #121310 Nocturnal Charcoal Paper */
     --foreground: 60 18% 95%;           /* #f4f4ee Warm Parchment Ink */
     --card: 75 7% 10%;                  /* #1a1b17 Elevated Dark Moleskine Surface */
     --card-foreground: 60 18% 95%;
     --popover: 75 7% 10%;               /* #1a1b17 */
     --popover-foreground: 60 18% 95%;
-    --primary: 72 85% 32%;              /* #7a940c Luminous Olive CTA */
+    --primary: 22 73% 44%;              /* #c05a1e Warm Rust CTA */
     --primary-foreground: 0 0% 100%;
     --secondary: 75 7% 14%;             /* #232520 Dark Fog Inset */
     --secondary-foreground: 60 18% 95%;
     --muted: 75 7% 14%;                 /* #232520 */
     --muted-foreground: 73 5% 55%;      /* #8e9087 Warm Dark Slate */
-    --accent: 79 43% 13%;               /* #252e12 Deep Sprout Tint */
-    --accent-foreground: 68 49% 52%;    /* #b2c248 Olive Press */
+    --accent: 23 77% 15%;               /* #452009 Deep Rust Tint */
+    --accent-foreground: 22 71% 62%;    /* #e18b5b Rust Press */
     --destructive: 11 80% 58%;          /* #e95d3d Ember Fill */
     --destructive-foreground: 0 0% 100%;
     --border: 75 7% 15%;                /* #272923 Hairline Dark Ash Border */
     --input: 75 8% 20%;                 /* #34362e Dark Stone Control Border */
-    --ring: 72 74% 38%;                 /* #8ca819 Fern Accent */
+    --ring: 22 73% 44%;                 /* #c05a1e Rust Accent */
 
     /* Surface tokens (dark) */
     --surface-canvas: #121310;
     --surface-card: #1a1b17;
     --surface-tinted: #232520;
-    --surface-accent-tint: #252e12;
+    --surface-accent-tint: #452009;
   }
 }
 
@@ -354,6 +341,10 @@
     font-weight: 600;
     letter-spacing: 0.005em;
   }
+
+  code, kbd, samp, pre, .font-mono, textarea.font-mono {
+    font-family: 'Cascadia Mono', 'Cascadia Code', 'Monaco', 'SF Mono', 'Menlo', monospace !important;
+  }
 }
 
 /* Hide native number input spinners globally */
@@ -387,28 +378,28 @@ input[type="number"] {
     opacity: 0.5;
   }
 
-  /* Primary Download / CTA Button: Forest CTA #5b6f00, 9999px pill, white text */
+  /* Primary Download / CTA Button: Forest CTA #a34914, 9999px pill, white text */
   .btn-primary {
     color: #ffffff;
-    background-color: #5b6f00;
-    border: 1px solid #4a5c00;
+    background-color: #a34914;
+    border: 1px solid #8a3e11;
     border-radius: 9999px;
     padding: 9px 20px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   }
   .btn-primary:hover {
-    background-color: #4c5616;
-    border-color: #3e4811;
+    background-color: #8a3e11;
+    border-color: #6c300d;
   }
   .dark .btn-primary {
     color: #ffffff;
-    background-color: #7a940c;
-    border: 1px solid #667c0a;
+    background-color: #c05a1e;
+    border: 1px solid #b55112;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
   .dark .btn-primary:hover {
-    background-color: #8aa70e;
-    border-color: #728b0b;
+    background-color: #c05a1e;
+    border-color: #c55814;
   }
 
   /* Secondary Control Button: White Surface, Stone Border #d5d5d2, 8px radius */
@@ -432,13 +423,13 @@ input[type="number"] {
   }
   .dark .btn-secondary:hover {
     background-color: #232520;
-    border-color: #484b3f;
+    border-color: #543b2f;
   }
 
-  /* Announcement Pill Button: Sprout Tint #e5eacd, Stone Border, 9999px radius */
+  /* Announcement Pill Button: Sprout Tint #f3d9ca, Stone Border, 9999px radius */
   .btn-sprout, .btn-pill-announcement {
     color: #0e0f0c;
-    background-color: #e5eacd;
+    background-color: #f3d9ca;
     border: 1px solid #d5d5d2;
     border-radius: 9999px;
     padding: 7px 16px;
@@ -446,17 +437,17 @@ input[type="number"] {
     font-weight: 400;
   }
   .btn-sprout:hover, .btn-pill-announcement:hover {
-    background-color: #dde3be;
-    border-color: #788c15;
+    background-color: #f7e3d6;
+    border-color: #c05a1e;
   }
   .dark .btn-sprout, .dark .btn-pill-announcement {
-    color: #b2c248;
-    background-color: #252e12;
-    border: 1px solid #4a5c18;
+    color: #e18b5b;
+    background-color: #452009;
+    border: 1px solid #8a3e11;
   }
   .dark .btn-sprout:hover, .dark .btn-pill-announcement:hover {
-    background-color: #2e3a17;
-    border-color: #788c15;
+    background-color: #5e2a0b;
+    border-color: #c05a1e;
   }
 
   /* Destructive Action Button: Ember Fill #e95d3d */
@@ -486,14 +477,14 @@ input[type="number"] {
   .badge-ai {
     @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium select-none;
     border-radius: 9999px;
-    background-color: #e5eacd;
-    border: 1px solid #788c15;
-    color: #5b6f00;
+    background-color: #f3d9ca;
+    border: 1px solid #c05a1e;
+    color: #a34914;
   }
   .dark .badge-ai {
-    background-color: #252e12;
-    border: 1px solid #788c15;
-    color: #b2c248;
+    background-color: #452009;
+    border: 1px solid #c05a1e;
+    color: #e18b5b;
   }
 
   /* Recording Indicator Dot */

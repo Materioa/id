@@ -1,9 +1,14 @@
+<svelte:head>
+  <title>Notifications</title>
+</svelte:head>
+
 <script lang="ts">
   import { makeAdminRequest } from '$lib/api/admin';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Notification01Icon, Add01Icon, SentIcon, Delete01Icon, Link01Icon, Edit01Icon } from '@hugeicons/core-free-icons';
   import { onMount } from 'svelte';
   import { addToast } from '$lib/stores/toast';
+  import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 
   type Notification = {
     id: string;
@@ -21,6 +26,12 @@
 
   let editMode = $state(false);
   let currentNotifId = $state('');
+
+  // Confirm Modal state
+  let isConfirmOpen = $state(false);
+  let confirmTitle = $state('');
+  let confirmMessage = $state('');
+  let onConfirmAction = $state<() => void>(() => {});
 
   let newNotif = $state({
     title: '',
@@ -47,7 +58,20 @@
 
   async function sendNotification(e: Event) {
     e.preventDefault();
-    if (!editMode && !confirm('Are you sure you want to send this global notification?')) return;
+    if (!editMode) {
+      confirmTitle = 'Send Global Notification';
+      confirmMessage = 'Are you sure you want to send this global notification?';
+      onConfirmAction = async () => {
+        await executeSendNotification();
+      };
+      isConfirmOpen = true;
+      return;
+    }
+    
+    await executeSendNotification();
+  }
+
+  async function executeSendNotification() {
     
     isSubmitting = true;
     try {
@@ -86,8 +110,10 @@
 </script>
 
 <div class="p-6 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
+  <ConfirmModal bind:isOpen={isConfirmOpen} title={confirmTitle} message={confirmMessage} onConfirm={onConfirmAction} confirmText={confirmTitle.includes('Delete') ? 'Delete' : 'Confirm'} />
+  
   <div>
-    <h1 class="text-2xl font-bold text-foreground tracking-tight">Push Notifications</h1>
+    <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">Push Notifications</h1>
     <p class="text-muted-foreground mt-1 text-sm">Send and manage global push notifications to all users.</p>
   </div>
 
@@ -105,22 +131,22 @@
       </div>
       <form onsubmit={sendNotification} class="space-y-4">
           <div class="space-y-1.5">
-            <label for="notifTitle" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Title *</label>
+            <label for="notifTitle" class="text-xs font-semibold text-muted-foreground  ">Title *</label>
             <input id="notifTitle" type="text" bind:value={newNotif.title} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="e.g. Server Maintenance" />
           </div>
           
           <div class="space-y-1.5">
-            <label for="notifCategory" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category / Tag</label>
+            <label for="notifCategory" class="text-xs font-semibold text-muted-foreground  ">Category / Tag</label>
             <input id="notifCategory" type="text" bind:value={newNotif.category} class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="e.g. Update" />
           </div>
           
           <div class="space-y-1.5">
-            <label for="notifBody" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Message Body *</label>
+            <label for="notifBody" class="text-xs font-semibold text-muted-foreground  ">Message Body *</label>
             <textarea id="notifBody" bind:value={newNotif.body} required class="w-full min-h-[100px] bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all resize-y" placeholder="Notification content..."></textarea>
           </div>
 
           <div class="space-y-1.5">
-            <label for="notifLink" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action Link (Optional)</label>
+            <label for="notifLink" class="text-xs font-semibold text-muted-foreground  ">Action Link (Optional)</label>
             <div class="relative">
               <div class="absolute inset-y-0 left-0 flex items-center pointer-events-none text-muted-foreground">
                 <HugeiconsIcon icon={Link01Icon} size={16} />
@@ -171,13 +197,16 @@
                     <button onclick={() => editNotification(notif)} class="text-muted-foreground hover:text-primary transition-colors">
                       <HugeiconsIcon icon={Edit01Icon} size={14} />
                     </button>
-                    <button onclick={async () => {
-                      if(confirm('Are you sure you want to delete this notification?')) {
+                    <button onclick={() => {
+                      confirmTitle = 'Delete Notification';
+                      confirmMessage = 'Are you sure you want to delete this notification?';
+                      onConfirmAction = async () => {
                         try {
                           await makeAdminRequest(`notifications?id=${notif.id}`, 'DELETE');
                           loadNotifications();
                         } catch(e: any) { addToast(e.message, 'error'); }
-                      }
+                      };
+                      isConfirmOpen = true;
                     }} class="text-muted-foreground hover:text-destructive transition-colors">
                       <HugeiconsIcon icon={Delete01Icon} size={14} />
                     </button>

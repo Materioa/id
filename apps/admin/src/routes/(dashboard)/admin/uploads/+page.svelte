@@ -1,3 +1,7 @@
+<svelte:head>
+  <title>Uploads</title>
+</svelte:head>
+
 <script lang="ts">
   import { makeAdminRequest } from '$lib/api/admin';
   import { HugeiconsIcon } from '@hugeicons/svelte';
@@ -197,9 +201,9 @@
         const finalSubject = section.subject || section.customSubject;
         const finalCategory = section.category === 'Other' ? section.customCategory : section.category;
         
-        // Path logic matching legacy BTech
+        // Files go directly into pdfs/sem/subject/ — no category subfolder
         const semClean = section.semester.replace(' (Miscellaneous)', '');
-        const pathBase = `pdfs/${semClean}/${finalSubject}/${finalCategory}`;
+        const pathBase = `pdfs/${semClean}/${finalSubject}`;
         
         for (const fileObj of section.files) {
           uploadStatus = `Processing ${fileObj.name}.pdf...`;
@@ -207,7 +211,8 @@
           
           stagedFiles.push({
             path: `${pathBase}/${fileObj.name}.pdf`,
-            content: base64Content
+            content: base64Content,
+            category: finalCategory
           });
 
           processedFiles++;
@@ -252,7 +257,7 @@
 <div class="p-6 max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300">
   <div class="flex flex-col sm:flex-row sm:items-center items-start justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold text-foreground tracking-tight">Course Uploads</h1>
+      <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">Course Uploads</h1>
       <p class="text-muted-foreground mt-1 text-sm">Upload course materials directly to the CDN.</p>
     </div>
     <div class="flex items-center gap-3">

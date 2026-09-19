@@ -249,7 +249,7 @@
     <AuthCard maxWidth="max-w-[480px]">
       {#if isLoading}
         <div class="flex flex-col justify-center items-center h-52 gap-3">
-          <div class="w-7 h-7 border-2 border-[#5b6f00] dark:border-[#7a940c] border-t-transparent rounded-full animate-spin"></div>
+          <div class="w-7 h-7 border-2 border-[#a34914] dark:border-[#c05a1e] border-t-transparent rounded-full animate-spin"></div>
           <p class="text-xs text-muted-foreground font-medium">Loading authorization details...</p>
         </div>
 
@@ -286,9 +286,9 @@
           
           <!-- Animated Connection Pulsing Dots -->
           <div class="flex gap-2 justify-center items-center px-1">
-            <div class="w-1.5 h-1.5 rounded-full bg-[#5b6f00] dark:bg-[#7a940c] dot-1"></div>
-            <div class="w-1.5 h-1.5 rounded-full bg-[#5b6f00] dark:bg-[#7a940c] dot-2"></div>
-            <div class="w-1.5 h-1.5 rounded-full bg-[#5b6f00] dark:bg-[#7a940c] dot-3"></div>
+            <div class="w-1.5 h-1.5 rounded-full bg-[#a34914] dark:bg-[#c05a1e] dot-1"></div>
+            <div class="w-1.5 h-1.5 rounded-full bg-[#a34914] dark:bg-[#c05a1e] dot-2"></div>
+            <div class="w-1.5 h-1.5 rounded-full bg-[#a34914] dark:bg-[#c05a1e] dot-3"></div>
           </div>
 
           <!-- Target App Icon -->
@@ -324,7 +324,7 @@
                 {#if currentUser.profilePicture}
                   <img src={currentUser.profilePicture} alt="Avatar" class="w-8 h-8 rounded-full bg-muted object-cover shrink-0" />
                 {:else}
-                  <div class="w-8 h-8 rounded-full bg-[#5b6f00]/15 dark:bg-[#7a940c]/20 text-[#5b6f00] dark:text-[#b2c248] flex items-center justify-center font-bold text-xs shrink-0">
+                  <div class="w-8 h-8 rounded-full bg-[#a34914]/15 dark:bg-[#c05a1e]/20 text-[#a34914] dark:text-[#e18b5b] flex items-center justify-center font-bold text-xs shrink-0">
                     {(currentUser.displayName || currentUser.username || 'U').charAt(0).toUpperCase()}
                   </div>
                 {/if}
@@ -354,7 +354,7 @@
           <div class="rounded-[16px] bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.08] p-3.5 space-y-3 max-h-[190px] overflow-y-auto">
             {#each permissionsList as p}
               <div class="flex items-start gap-2.5">
-                <div class="w-5 h-5 rounded-full bg-[#5b6f00]/10 dark:bg-[#7a940c]/20 text-[#5b6f00] dark:text-[#b2c248] flex items-center justify-center shrink-0 mt-0.5">
+                <div class="w-5 h-5 rounded-full bg-[#a34914]/10 dark:bg-[#c05a1e]/20 text-[#a34914] dark:text-[#e18b5b] flex items-center justify-center shrink-0 mt-0.5">
                   <Check class="w-3.5 h-3.5" />
                 </div>
                 <div>
@@ -372,7 +372,7 @@
             type="button"
             onclick={handleAllow}
             disabled={isAuthorizing}
-            class="w-full h-12 rounded-[14px] bg-[#5b6f00] dark:bg-[#7a940c] hover:bg-[#4c5c00] dark:hover:bg-[#8ba80e] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
+            class="w-full h-12 rounded-[14px] bg-[#a34914] dark:bg-[#c05a1e] hover:bg-[#c05a1e] dark:hover:bg-[#a34914] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
           >
             {#if isAuthorizing}
               <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

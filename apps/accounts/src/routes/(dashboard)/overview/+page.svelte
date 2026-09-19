@@ -235,7 +235,7 @@
           {#if user.plan === 'Super'}
             <span title="Verified Super User"><HugeiconsIcon icon={CheckmarkBadge01Icon} size={20} class="text-[#800020]" /></span>
           {:else if user.plan === 'Pro'}
-            <span title="Verified Pro User"><HugeiconsIcon icon={CheckmarkBadge01Icon} size={20} class="text-[#788c15]" /></span>
+            <span title="Verified Pro User"><HugeiconsIcon icon={CheckmarkBadge01Icon} size={20} class="text-[#c05a1e]" /></span>
           {/if}
         </div>
         <!-- Align email/username below name -->

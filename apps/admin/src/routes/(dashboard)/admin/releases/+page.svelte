@@ -1,3 +1,7 @@
+<svelte:head>
+  <title>Releases</title>
+</svelte:head>
+
 <script lang="ts">
   import { makeAdminRequest } from '$lib/api/admin';
   import { HugeiconsIcon } from '@hugeicons/svelte';
@@ -5,6 +9,7 @@
   import { onMount } from 'svelte';
   import { addToast } from '$lib/stores/toast';
   import Modal from '$lib/components/Modal.svelte';
+  import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 
   type Release = {
     id: string;
@@ -22,6 +27,12 @@
   let isLoading = $state(false);
   let activeTab = $state<'active' | 'history'>('active');
   let isSubmitting = $state(false);
+
+  // Confirm Modal state
+  let isConfirmOpen = $state(false);
+  let confirmTitle = $state('');
+  let confirmMessage = $state('');
+  let onConfirmAction = $state<() => void>(() => {});
 
     let isReleaseModalOpen = $state(false);
   let editMode = $state(false);
@@ -91,29 +102,41 @@
   }
 
   async function deleteRelease(id: string) {
-    if (!confirm('Are you sure you want to delete this release? This cannot be undone.')) return;
-    try {
-      await makeAdminRequest(`releases?id=${id}`, 'DELETE');
-      loadReleases();
-    } catch (e: any) {
-      addToast(`Failed to delete release: ${e.message}`);
-    }
+    confirmTitle = 'Delete Release';
+    confirmMessage = 'Are you sure you want to delete this release? This cannot be undone.';
+    onConfirmAction = async () => {
+      try {
+        await makeAdminRequest(`releases?id=${id}`, 'DELETE');
+        loadReleases();
+      } catch (e: any) {
+        addToast(`Failed to delete release: ${e.message}`, 'error');
+      }
+    };
+    isConfirmOpen = true;
   }
 
-  async function archiveRelease(release: Release) {
-    if (!confirm('Are you sure you want to move this release to history?')) return;
-    try {
-      await makeAdminRequest(`releases?id=${release.id}`, 'PUT', { status: 'History' });
-      loadReleases();
-    } catch (e: any) {
-      addToast(`Failed to update release: ${e.message}`);
+  async function toggleReleaseStatus(release: Release) {
+    if (release.status !== 'History') {
+      confirmTitle = 'Move to History';
+      confirmMessage = 'Are you sure you want to move this release to history?';
+      onConfirmAction = async () => {
+        try {
+          await makeAdminRequest(`releases?id=${release.id}`, 'PUT', { status: 'History' });
+          loadReleases();
+        } catch (e: any) {
+          addToast(`Failed to update release: ${e.message}`, 'error');
+        }
+      };
+      isConfirmOpen = true;
     }
   }
 </script>
 
 <div class="p-6 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
+  <ConfirmModal bind:isOpen={isConfirmOpen} title={confirmTitle} message={confirmMessage} onConfirm={onConfirmAction} confirmText={confirmTitle.includes('Delete') ? 'Delete' : 'Confirm'} />
+  
   <div>
-    <h1 class="text-2xl font-bold text-foreground tracking-tight">App Releases</h1>
+    <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">App Releases</h1>
     <p class="text-muted-foreground mt-1 text-sm">Manage version history and release notes.</p>
   </div>
 
@@ -123,27 +146,27 @@
       <form onsubmit={(e) => { createRelease(e); isReleaseModalOpen = false; }} class="space-y-4 px-6 pb-6 pt-2">
         
           <div class="space-y-1.5">
-            <label for="releaseVersion" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Version (e.g. v2.1.0) *</label>
+            <label for="releaseVersion" class="text-xs font-semibold text-muted-foreground  ">Version (e.g. v2.1.0) *</label>
             <input id="releaseVersion" type="text" bind:value={newRelease.version} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="v2.0.0" />
           </div>
           
           <div class="space-y-1.5">
-            <label for="releaseBranch" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Branch</label>
+            <label for="releaseBranch" class="text-xs font-semibold text-muted-foreground  ">Branch</label>
             <input id="releaseBranch" type="text" bind:value={newRelease.branch} class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="e.g. main" />
           </div>
           
           <div class="space-y-1.5">
-            <label for="releaseNotes" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Release Notes / Changes *</label>
+            <label for="releaseNotes" class="text-xs font-semibold text-muted-foreground  ">Release Notes / Changes *</label>
             <textarea id="releaseNotes" bind:value={newRelease.notes} required class="w-full min-h-[100px] bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all resize-y" placeholder="What's new..."></textarea>
           </div>
 
           <div class="space-y-1.5">
-            <label for="releaseDate" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Build Date *</label>
+            <label for="releaseDate" class="text-xs font-semibold text-muted-foreground  ">Build Date *</label>
             <input id="releaseDate" type="date" bind:value={newRelease.date} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
           </div>
 
           <div class="space-y-1.5">
-            <label for="releaseLink" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">App Link (Optional)</label>
+            <label for="releaseLink" class="text-xs font-semibold text-muted-foreground  ">App Link (Optional)</label>
             <input id="releaseLink" type="url" bind:value={newRelease.link} class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="https://..." />
           </div>
 
@@ -203,7 +226,7 @@
                     <h4 class="font-bold text-foreground text-lg flex items-center gap-2">
                       {release.version}
                       {#if release.branch}
-                        <span class="px-2 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground uppercase">{release.branch}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground ">{release.branch}</span>
                       {/if}
                     </h4>
                     <p class="text-xs text-muted-foreground">{new Date(release.date).toLocaleDateString()}</p>
@@ -214,7 +237,7 @@
                     <HugeiconsIcon icon={Edit01Icon} size={16} />
                   </button>
                   {#if release.status !== 'History'}
-                    <button onclick={() => archiveRelease(release)} class="text-muted-foreground hover:text-primary p-2 rounded-lg hover:bg-primary/10 transition-colors text-xs font-medium">
+                    <button onclick={() => toggleReleaseStatus(release)} class="text-muted-foreground hover:text-primary p-2 rounded-lg hover:bg-primary/10 transition-colors text-xs font-medium">
                       Archive
                     </button>
                   {/if}

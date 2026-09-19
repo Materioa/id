@@ -1,3 +1,7 @@
+<svelte:head>
+  <title>Invites</title>
+</svelte:head>
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { addToast } from '$lib/stores/toast';
@@ -119,7 +123,7 @@
 <div class="space-y-6 max-w-4xl mx-auto" in:fade>
   <div class="flex flex-col sm:flex-row sm:items-center items-start justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight text-foreground">Invite Management</h1>
+      <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">Invite Management</h1>
       <p class="text-sm text-muted-foreground mt-1">Generate and manage system invitation codes.</p>
     </div>
   </div>
@@ -150,16 +154,16 @@
     <div class="p-6 space-y-4">
       <div class="space-y-4">
         <div class="space-y-2">
-          <label for="customCode" class="text-sm font-medium text-muted-foreground uppercase tracking-wider text-xs">Custom Code (Optional)</label>
-          <input type="text" id="customCode" bind:value={customCode} placeholder="Leave empty for random" class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all uppercase tracking-wider font-mono" />
+          <label for="customCode" class="text-sm font-medium text-muted-foreground   text-xs">Custom Code (Optional)</label>
+          <input type="text" id="customCode" bind:value={customCode} placeholder="Leave empty for random" class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all   font-mono" />
         </div>
         <div class="flex gap-4">
           <div class="space-y-2 w-1/2">
-            <label for="expires" class="text-sm font-medium text-muted-foreground uppercase tracking-wider text-xs">Expires In (Days)</label>
+            <label for="expires" class="text-sm font-medium text-muted-foreground   text-xs">Expires In (Days)</label>
             <input type="number" id="expires" bind:value={newExpires} min="1" max="365" class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
           </div>
           <div class="space-y-2 w-1/2">
-            <label for="uses" class="text-sm font-medium text-muted-foreground uppercase tracking-wider text-xs">Max Uses</label>
+            <label for="uses" class="text-sm font-medium text-muted-foreground   text-xs">Max Uses</label>
             <input type="number" id="uses" bind:value={maxUses} min="1" class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
           </div>
         </div>
@@ -221,7 +225,7 @@
                     {:else if new Date(invite.expires_at) < new Date()}
                       <span class="text-destructive font-medium">Expired</span>
                     {:else}
-                      <span class="text-green-500 font-medium">Active</span>
+                      <span class="text-primary font-medium">Active</span>
                     {/if}
                     {#if invite.max_uses > 1}
                       <span class="text-xs text-muted-foreground">{invite.current_uses} / {invite.max_uses} uses</span>
@@ -268,11 +272,11 @@
                       {#each invite.redemptions as redemption}
                         {@const user = redemption.user}
                         {#if user?.has_admin_privileges}
-                        <button onclick={() => toggleAdmin(user.id, false)} class="p-2 text-green-500 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Remove Admin">
+                        <button onclick={() => toggleAdmin(user.id, false)} class="p-2 text-primary hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors" title="Remove Admin">
                           <HugeiconsIcon icon={Shield01Icon} size={16} />
                         </button>
                       {:else}
-                        <button onclick={() => toggleAdmin(user.id, true)} class="p-2 text-muted-foreground/50 hover:text-green-500 hover:bg-green-500/10 rounded-lg transition-colors" title="Make Admin">
+                        <button onclick={() => toggleAdmin(user.id, true)} class="p-2 text-muted-foreground/50 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Make Admin">
                           <HugeiconsIcon icon={Shield01Icon} size={16} />
                         </button>
                         {/if}

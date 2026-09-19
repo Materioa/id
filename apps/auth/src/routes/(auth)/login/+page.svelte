@@ -400,7 +400,7 @@
           <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
             <a 
               href="mailto:help@getmaterio.app" 
-              class="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#5b6f00] dark:bg-[#7a940c] text-white text-xs sm:text-sm font-medium hover:opacity-90 transition-opacity"
+              class="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#a34914] dark:bg-[#c05a1e] text-white text-xs sm:text-sm font-medium hover:opacity-90 transition-opacity"
             >
               Contact Support
             </a>
@@ -457,7 +457,7 @@
                 oninput={() => errors.identity = ''}
                 required
                 placeholder="Email or username"
-                class="auth-input w-full h-12 px-4 rounded-[14px] border text-foreground placeholder:text-muted-foreground text-[14px] outline-none ring-2 ring-[#7a940c]/25 dark:ring-[#8aa70e]/30 border-[#7a940c]/60 dark:border-[#8aa70e]/80 transition-all font-sans"
+                class="auth-input w-full h-12 px-4 rounded-[14px] border text-foreground placeholder:text-muted-foreground text-[14px] outline-none ring-2 ring-[#c05a1e]/25 dark:ring-[#c05a1e]/30 border-[#c05a1e]/60 dark:border-[#c05a1e]/80 transition-all font-sans"
               />
               {#if errors.identity}
                 <p class="text-[13px] text-[#e95d3d] dark:text-[#ff6b4a] pt-1.5 px-1 leading-snug font-normal animate-in fade-in duration-150">
@@ -468,7 +468,7 @@
 
             <button 
               type="submit"
-              class="w-full h-12 rounded-[14px] bg-[#5b6f00] dark:bg-[#7a940c] hover:bg-[#4c5c00] dark:hover:bg-[#8ba80e] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+              class="w-full h-12 rounded-[14px] bg-[#a34914] dark:bg-[#c05a1e] hover:bg-[#c05a1e] dark:hover:bg-[#a34914] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99]"
             >
               <span>Continue with Materio ID</span>
             </button>
@@ -514,7 +514,7 @@
                 </button>
 
                 {#if lastUsedProvider === 'materio'}
-                  <span class="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide bg-[#5b6f00] text-white dark:bg-[#7a940c] shadow-xs pointer-events-none select-none">
+                  <span class="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide bg-[#a34914] text-white dark:bg-[#c05a1e] shadow-xs pointer-events-none select-none">
                     Last used
                   </span>
                 {/if}
@@ -545,7 +545,7 @@
                 </button>
 
                 {#if lastUsedProvider === 'google'}
-                  <span class="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide bg-[#5b6f00] text-white dark:bg-[#7a940c] shadow-xs pointer-events-none select-none">
+                  <span class="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide bg-[#a34914] text-white dark:bg-[#c05a1e] shadow-xs pointer-events-none select-none">
                     Last used
                   </span>
                 {/if}
@@ -573,7 +573,7 @@
                 </button>
 
                 {#if lastUsedProvider === 'github'}
-                  <span class="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide bg-[#5b6f00] text-white dark:bg-[#7a940c] shadow-xs pointer-events-none select-none">
+                  <span class="absolute -top-2.5 right-3 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide bg-[#a34914] text-white dark:bg-[#c05a1e] shadow-xs pointer-events-none select-none">
                     Last used
                   </span>
                 {/if}
@@ -594,13 +594,13 @@
             <!-- Selected User Identity Pill -->
             <div class="identity-pill flex items-center justify-between p-2.5 px-3.5 rounded-[12px] border text-xs">
               <div class="flex items-center gap-2 truncate pr-2">
-                <span class="w-2 h-2 rounded-full bg-[#5b6f00] dark:bg-[#7a940c] shrink-0"></span>
+                <span class="w-2 h-2 rounded-full bg-[#a34914] dark:bg-[#c05a1e] shrink-0"></span>
                 <span class="font-medium text-foreground truncate">{identity}</span>
               </div>
               <button 
                 type="button" 
                 onclick={() => { step = 'sso_identity'; clearErrors(); }}
-                class="text-[#5b6f00] dark:text-[#b2c248] hover:underline font-medium shrink-0 cursor-pointer"
+                class="text-[#a34914] dark:text-[#e18b5b] hover:underline font-medium shrink-0 cursor-pointer"
               >
                 Change
               </button>
@@ -616,7 +616,7 @@
                   oninput={() => errors.password = ''}
                   required
                   placeholder="Password"
-                  class="auth-input w-full h-12 px-4 pr-11 rounded-[14px] border text-foreground placeholder:text-muted-foreground text-[14px] outline-none ring-1 ring-transparent focus:ring-2 focus:ring-[#7a940c]/20 transition-all font-sans"
+                  class="auth-input w-full h-12 px-4 pr-11 rounded-[14px] border text-foreground placeholder:text-muted-foreground text-[14px] outline-none ring-1 ring-transparent focus:ring-2 focus:ring-[#c05a1e]/20 transition-all font-sans"
                 />
                 <button 
                   type="button"
@@ -652,7 +652,7 @@
             <button 
               type="submit" 
               disabled={isLoading}
-              class="w-full h-12 rounded-[14px] bg-[#5b6f00] dark:bg-[#7a940c] hover:bg-[#4c5c00] dark:hover:bg-[#8ba80e] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+              class="w-full h-12 rounded-[14px] bg-[#a34914] dark:bg-[#c05a1e] hover:bg-[#c05a1e] dark:hover:bg-[#a34914] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {#if isLoading}
                 <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -689,7 +689,7 @@
                 oninput={() => errors['2fa'] = ''}
                 required
                 placeholder="000000"
-                class="auth-input w-full h-14 rounded-[14px] border text-foreground text-center tracking-[0.4em] text-2xl font-mono outline-none ring-2 ring-transparent focus:ring-[#7a940c]/25 transition-all"
+                class="auth-input w-full h-14 rounded-[14px] border text-foreground text-center tracking-[0.4em] text-2xl font-mono outline-none ring-2 ring-transparent focus:ring-[#c05a1e]/25 transition-all"
                 style="font-family: ui-monospace, 'Cascadia Code', 'SF Mono', 'Monaco', 'Consolas', monospace;"
                 maxlength="6"
                 pattern="[0-9]*"
@@ -706,7 +706,7 @@
             <button 
               type="submit" 
               disabled={isLoading}
-              class="w-full h-12 rounded-[14px] bg-[#5b6f00] dark:bg-[#7a940c] hover:bg-[#4c5c00] dark:hover:bg-[#8ba80e] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
+              class="w-full h-12 rounded-[14px] bg-[#a34914] dark:bg-[#c05a1e] hover:bg-[#c05a1e] dark:hover:bg-[#a34914] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
             >
               {#if isLoading}
                 <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

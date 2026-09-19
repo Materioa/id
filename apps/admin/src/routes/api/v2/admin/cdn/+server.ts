@@ -6,8 +6,12 @@ import { env } from '$env/dynamic/private';
 const GITHUB_OWNER = 'Materioa';
 const GITHUB_REPO = 'cdn-materio';
 
-function getOctokit() {
-  return new Octokit({ auth: env.GITHUB_TOKEN || '' });
+function getOctokit(platform?: any) {
+  let token = platform?.env?.GITHUB_TOKEN || (env as any)?.GITHUB_TOKEN;
+  if (!token && typeof process !== 'undefined' && process.env?.GITHUB_TOKEN) {
+    token = process.env.GITHUB_TOKEN;
+  }
+  return new Octokit({ auth: token || '' });
 }
 
 async function checkAdmin(request: Request) {
@@ -113,7 +117,7 @@ export async function POST({ request, url }) {
       if (autoPushNotify && !notificationAdded && stagedFiles && stagedFiles.length > 0) {
         // Find unique subjects & categories uploaded
         const subjects = [...new Set(stagedFiles.map((f: any) => f.path.split('/')[2]))].filter(Boolean);
-        const categories = [...new Set(stagedFiles.map((f: any) => f.path.split('/')[3]))].filter(Boolean);
+        const categories = [...new Set(stagedFiles.map((f: any) => f.category).filter(Boolean))];
         
         let notifications: any[] = [];
         try {
@@ -157,12 +161,15 @@ export async function POST({ request, url }) {
         let isResourceLibModified = false;
         for (const file of stagedFiles) {
           const parts = file.path.split('/');
-          if (parts[0] !== 'pdfs' || parts.length < 5) continue;
+          // Path is now pdfs/sem/subject/filename.pdf (no category folder)
+          if (parts[0] !== 'pdfs' || parts.length < 4) continue;
           
           const sem = parts[1];
           const subject = parts[2];
-          const category = parts[3];
-          const filename = parts.pop().replace(/\.[^/.]+$/, "");
+          const category = file.category; // Category comes from metadata, not path
+          const filename = parts[parts.length - 1].replace(/\.[^/.]+$/, "");
+          
+          if (!category) continue; // Skip if no category metadata
           
           if (!resourceLib[sem]) resourceLib[sem] = {};
           if (!resourceLib[sem][subject]) resourceLib[sem][subject] = [];
@@ -291,19 +298,237 @@ export async function PUT({ request }) {
   }
 }
 
-export async function DELETE({ request, url }) {
+export async function DELETE({ request, url, platform }: { request: Request; url: URL; platform?: any }) {
   if (!(await checkAdmin(request))) return json({ error: 'Unauthorized' }, { status: 401 });
-  const path = url.searchParams.get('path');
-  if (!path) return json({ error: 'Path is required' }, { status: 400 });
+  const rawPath = url.searchParams.get('path');
+  if (!rawPath) return json({ error: 'Path is required' }, { status: 400 });
+
+  const cleanPath = rawPath.replace(/^\/+|\/+$/g, '');
+  if (!cleanPath) return json({ error: 'Cannot delete root repository' }, { status: 400 });
+
   try {
-    const octokit = getOctokit();
-    const { data } = await octokit.repos.getContent({ owner: GITHUB_OWNER, repo: GITHUB_REPO, path });
-    if (Array.isArray(data)) return json({ error: 'Cannot delete non-empty directories directly' }, { status: 400 });
-    await octokit.repos.deleteFile({
-      owner: GITHUB_OWNER, repo: GITHUB_REPO, path,
-      message: `Remove ${path} via Materio CMS`, sha: data.sha
+    const octokit = getOctokit(platform);
+
+    // 1. Fetch current commit & full recursive tree
+    const { data: refData } = await octokit.git.getRef({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_REPO,
+      ref: 'heads/main'
     });
-    return json({ success: true, path });
+    const currentCommitSha = refData.object.sha;
+
+    const { data: currentCommit } = await octokit.git.getCommit({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_REPO,
+      commit_sha: currentCommitSha
+    });
+
+    const { data: fullTree } = await octokit.git.getTree({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_REPO,
+      tree_sha: currentCommit.tree.sha,
+      recursive: 'true'
+    });
+
+    // 2. Identify items to delete (exact path match or within directory path)
+    const isTarget = (p: string) => p === cleanPath || p.startsWith(cleanPath + '/');
+    const targetItems = fullTree.tree.filter((item) => item.path && isTarget(item.path));
+
+    if (targetItems.length === 0) {
+      return json({ error: `Path "${cleanPath}" does not exist` }, { status: 404 });
+    }
+
+    const targetBlobs = targetItems.filter((item) => item.type === 'blob');
+
+    // 3. Clean up references in databases/beta/resource.lib.json
+    const pathParts = cleanPath.split('/');
+    const targetSem = pathParts[0] === 'pdfs' && pathParts.length >= 2 ? pathParts[1] : undefined;
+    const targetSub = pathParts[0] === 'pdfs' && pathParts.length >= 3 ? pathParts[2] : undefined;
+    const targetCat = pathParts[0] === 'pdfs' && pathParts.length === 4 ? pathParts[3] : undefined;
+
+    const deletedFilesInfo: { filename: string; rawFilename: string }[] = [];
+    for (const blob of targetBlobs) {
+      if (!blob.path) continue;
+      const parts = blob.path.split('/');
+      if (parts[0] !== 'pdfs') continue;
+      const rawFilename = parts[parts.length - 1];
+      if (rawFilename === '.gitkeep') continue;
+      const filename = rawFilename.replace(/\.[^/.]+$/, '');
+      deletedFilesInfo.push({ filename, rawFilename });
+    }
+
+    let isResourceLibModified = false;
+    let resourceLib: any = null;
+    const resourceLibBlobItem = fullTree.tree.find((item) => item.path === 'databases/beta/resource.lib.json');
+
+    if (resourceLibBlobItem && resourceLibBlobItem.sha) {
+      try {
+        const { data: blobData } = await octokit.git.getBlob({
+          owner: GITHUB_OWNER,
+          repo: GITHUB_REPO,
+          file_sha: resourceLibBlobItem.sha
+        });
+        const contentStr = Buffer.from(blobData.content, 'base64').toString('utf8');
+        resourceLib = JSON.parse(contentStr);
+      } catch (err) {
+        console.error('Failed to parse databases/beta/resource.lib.json:', err);
+      }
+    }
+
+    if (resourceLib && typeof resourceLib === 'object') {
+      for (const semKey of Object.keys(resourceLib)) {
+        if (targetSem && semKey.toLowerCase() !== targetSem.toLowerCase()) continue;
+        const semObj = resourceLib[semKey];
+        if (!semObj || typeof semObj !== 'object') continue;
+
+        for (const subKey of Object.keys(semObj)) {
+          if (targetSub && subKey.toLowerCase() !== targetSub.toLowerCase()) continue;
+          const categories = semObj[subKey];
+          if (!Array.isArray(categories)) continue;
+
+          const updatedCategories: any[] = [];
+          for (const cat of categories) {
+            if (!cat) continue;
+
+            // If entire category folder was targeted (e.g. pdfs/{sem}/{subject}/{category})
+            if (targetCat && cat.type && cat.type.trim().toLowerCase() === targetCat.trim().toLowerCase()) {
+              isResourceLibModified = true;
+              continue; // Drop entire category
+            }
+
+            // Otherwise filter content if files inside were deleted
+            if (!Array.isArray(cat.content)) continue;
+
+            const newContent = cat.content.filter((item: string) => {
+              if (typeof item !== 'string') return true;
+              const itemClean = item.trim().toLowerCase();
+              const shouldDelete = deletedFilesInfo.some((df) => {
+                return (
+                  itemClean === df.filename.trim().toLowerCase() ||
+                  itemClean === df.rawFilename.trim().toLowerCase()
+                );
+              });
+              return !shouldDelete;
+            });
+
+            if (newContent.length !== cat.content.length) {
+              isResourceLibModified = true;
+            }
+
+            // If category content becomes empty, delete the category
+            if (newContent.length > 0) {
+              updatedCategories.push({
+                ...cat,
+                content: newContent
+              });
+            } else {
+              isResourceLibModified = true;
+            }
+          }
+
+          if (updatedCategories.length > 0) {
+            semObj[subKey] = updatedCategories;
+          } else {
+            // Subject has no categories left -> remove subject
+            delete semObj[subKey];
+            isResourceLibModified = true;
+          }
+        }
+
+        // If semester has no subjects left -> remove semester
+        if (Object.keys(semObj).length === 0) {
+          delete resourceLib[semKey];
+          isResourceLibModified = true;
+        }
+      }
+    }
+
+    // 4. Build atomic tree mutation using base_tree and sha: null
+    const treeEntries: any[] = [];
+
+    // Check if cleanPath is explicitly a tree or blob in Git
+    const exactTree = fullTree.tree.find((item) => item.path === cleanPath && item.type === 'tree');
+    const exactBlob = fullTree.tree.find((item) => item.path === cleanPath && item.type === 'blob');
+
+    if (exactTree) {
+      treeEntries.push({
+        path: cleanPath,
+        mode: '040000',
+        type: 'tree',
+        sha: null
+      });
+    } else if (exactBlob) {
+      treeEntries.push({
+        path: cleanPath,
+        mode: exactBlob.mode || '100644',
+        type: 'blob',
+        sha: null
+      });
+    } else {
+      // Multiple items or folder without explicit intermediate tree entry
+      for (const item of targetItems) {
+        if (item.path) {
+          treeEntries.push({
+            path: item.path,
+            mode: item.mode || (item.type === 'tree' ? '040000' : '100644'),
+            type: item.type as any,
+            sha: null
+          });
+        }
+      }
+    }
+
+    // Include updated resource.lib.json if modified
+    if (isResourceLibModified && resourceLib) {
+      const { data: newResourceBlob } = await octokit.git.createBlob({
+        owner: GITHUB_OWNER,
+        repo: GITHUB_REPO,
+        content: JSON.stringify(resourceLib, null, 2),
+        encoding: 'utf-8'
+      });
+      treeEntries.push({
+        path: 'databases/beta/resource.lib.json',
+        mode: '100644',
+        type: 'blob',
+        sha: newResourceBlob.sha
+      });
+    }
+
+    // 5. Create new tree using base_tree
+    const { data: newTree } = await octokit.git.createTree({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_REPO,
+      base_tree: currentCommit.tree.sha,
+      tree: treeEntries
+    });
+
+    // 6. Create commit
+    const commitMsg = targetItems.length === 1
+      ? `Remove ${cleanPath} via Materio CMS`
+      : `Remove ${cleanPath} (${targetItems.length} items) via Materio CMS`;
+
+    const { data: newCommit } = await octokit.git.createCommit({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_REPO,
+      message: commitMsg,
+      tree: newTree.sha,
+      parents: [currentCommitSha]
+    });
+
+    // 7. Update ref
+    await octokit.git.updateRef({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_REPO,
+      ref: 'heads/main',
+      sha: newCommit.sha
+    });
+
+    return json({
+      success: true,
+      path: cleanPath,
+      deletedCount: targetItems.length,
+      resourceLibUpdated: isResourceLibModified
+    });
   } catch (error: any) {
     console.error('CDN DELETE error:', error);
     return json({ error: error.message }, { status: error.status || 500 });

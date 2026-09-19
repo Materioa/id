@@ -30,7 +30,7 @@
     data = [],
     emptyColor = 'hsl(var(--muted))',
     fontColor = 'hsl(var(--muted-foreground))',
-    colors = ['#e5eacd', '#b2c248', '#788c15', '#5b6f00'],
+    colors = ['#f3d9ca', '#e18b5b', '#c05a1e', '#a34914'],
     cellSize = 11,
     cellGap = 3,
   }: Props = $props();

@@ -1,3 +1,7 @@
+<svelte:head>
+  <title>Overview</title>
+</svelte:head>
+
 <script lang="ts">
   import { makeAdminRequest } from '$lib/api/admin';
   import { addToast } from '$lib/stores/toast';
@@ -148,9 +152,9 @@
 
 <div class="p-6 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-300">
   <div>
-    <h1 class="text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+    <h1 class="text-2xl sm:text-3xl font-serif font-normal text-foreground tracking-tight flex items-center gap-2">
       <HugeiconsIcon icon={DashboardSquare01Icon} size={24} class="text-primary" />
-      Admin Overview
+      Overview
     </h1>
     <p class="text-muted-foreground mt-1 text-sm">Monitor reading insights, top PDFs, and platform engagement.</p>
   </div>
@@ -244,7 +248,7 @@
                     <div class="flex flex-col">
                       <span class="font-medium text-foreground truncate max-w-[140px]" title={getDisplayName(user)}>{getDisplayName(user)}</span>
                       {#if user.participant_type === 'anon' || (!user.user_id && user.anon_id)}
-                        <span class="text-[10px] text-muted-foreground uppercase font-mono">{String(user.anon_id || user.username).slice(-8)}</span>
+                        <span class="text-[10px] text-muted-foreground  font-mono">{String(user.anon_id || user.username).slice(-8)}</span>
                       {:else if user.username}
                         <span class="text-[10px] text-muted-foreground truncate">@{user.username}</span>
                       {/if}
@@ -284,7 +288,7 @@
         </div>
 
         <div class="space-y-1.5">
-          <label for="modalBanReason" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+          <label for="modalBanReason" class="text-xs font-semibold text-muted-foreground   block">
             Reason for Ban *
           </label>
           <input

@@ -94,7 +94,7 @@
     <AuthCard maxWidth="max-w-[440px]">
       <div class="flex flex-col justify-center items-center py-8 space-y-4 text-center">
         <BudLogo class="w-16 h-16 text-foreground" />
-        <div class="w-7 h-7 border-2 border-[#5b6f00] dark:border-[#7a940c] border-t-transparent rounded-full animate-spin mt-2"></div>
+        <div class="w-7 h-7 border-2 border-[#a34914] dark:border-[#c05a1e] border-t-transparent rounded-full animate-spin mt-2"></div>
         <div class="space-y-1">
           <h2 class="text-xl font-serif text-foreground">Completing sign in...</h2>
           <p class="text-xs text-muted-foreground">Redirecting you to your account.</p>

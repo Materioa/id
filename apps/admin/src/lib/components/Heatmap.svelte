@@ -30,7 +30,7 @@
     data = [],
     emptyColor = '#ebedf0',
     fontColor = '#888',
-    colors = ['#9be9a8', '#40c463', '#30a14e', '#216e39'],
+    colors = ['#f3d9ca', '#e18b5b', '#c05a1e', '#a34914'],
     cellSize = 11,
     cellGap = 3,
   }: Props = $props();

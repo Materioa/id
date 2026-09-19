@@ -234,7 +234,7 @@
         {/if}
 
         {#if successMsg && step === 'otp'}
-          <div class="mb-5 p-3 rounded-xl bg-[#5b6f00]/10 dark:bg-[#7a940c]/20 border border-[#5b6f00]/20 text-[#5b6f00] dark:text-[#b2c248] text-xs sm:text-sm text-center font-medium leading-relaxed animate-in fade-in duration-150">
+          <div class="mb-5 p-3 rounded-xl bg-[#a34914]/10 dark:bg-[#c05a1e]/20 border border-[#a34914]/20 text-[#a34914] dark:text-[#e18b5b] text-xs sm:text-sm text-center font-medium leading-relaxed animate-in fade-in duration-150">
             {successMsg}
           </div>
         {/if}
@@ -247,13 +247,13 @@
               bind:value={email}
               required
               placeholder="name@company.com"
-              class="w-full h-12 px-4 rounded-[14px] bg-black/[0.03] dark:bg-white/[0.05] border border-black/10 dark:border-white/15 focus:border-[#7a940c] text-foreground placeholder:text-muted-foreground text-[14px] outline-none ring-2 ring-transparent focus:ring-[#7a940c]/25 transition-all font-sans"
+              class="w-full h-12 px-4 rounded-[14px] bg-black/[0.03] dark:bg-white/[0.05] border border-black/10 dark:border-white/15 focus:border-[#c05a1e] text-foreground placeholder:text-muted-foreground text-[14px] outline-none ring-2 ring-transparent focus:ring-[#c05a1e]/25 transition-all font-sans"
             />
 
             <button 
               type="submit" 
               disabled={isLoading}
-              class="w-full h-12 rounded-[14px] bg-[#5b6f00] dark:bg-[#7a940c] hover:bg-[#4c5c00] dark:hover:bg-[#8ba80e] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
+              class="w-full h-12 rounded-[14px] bg-[#a34914] dark:bg-[#c05a1e] hover:bg-[#c05a1e] dark:hover:bg-[#a34914] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
             >
               {#if isLoading}
                 <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -278,7 +278,7 @@
                   maxlength="1"
                   inputmode="numeric"
                   pattern="[0-9]*"
-                  class="w-11 h-13 rounded-[12px] bg-black/[0.03] dark:bg-white/[0.05] border border-black/10 dark:border-white/15 focus:border-[#7a940c] text-foreground text-center text-xl font-mono outline-none ring-2 ring-transparent focus:ring-[#7a940c]/25 transition-all"
+                  class="w-11 h-13 rounded-[12px] bg-black/[0.03] dark:bg-white/[0.05] border border-black/10 dark:border-white/15 focus:border-[#c05a1e] text-foreground text-center text-xl font-mono outline-none ring-2 ring-transparent focus:ring-[#c05a1e]/25 transition-all"
                 />
               {/each}
             </div>
@@ -286,7 +286,7 @@
             <button 
               type="submit" 
               disabled={isLoading}
-              class="w-full h-12 rounded-[14px] bg-[#5b6f00] dark:bg-[#7a940c] hover:bg-[#4c5c00] dark:hover:bg-[#8ba80e] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
+              class="w-full h-12 rounded-[14px] bg-[#a34914] dark:bg-[#c05a1e] hover:bg-[#c05a1e] dark:hover:bg-[#a34914] text-white font-medium text-[14px] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60"
             >
               {#if isLoading}
                 <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

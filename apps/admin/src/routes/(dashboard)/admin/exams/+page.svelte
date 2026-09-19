@@ -1,9 +1,14 @@
+<svelte:head>
+  <title>Exams</title>
+</svelte:head>
+
 <script lang="ts">
   import { makeAdminRequest } from '$lib/api/admin';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Add01Icon, Delete01Icon, FileEditIcon, Edit01Icon, FloppyDiskIcon, CheckmarkBadge01Icon, CloudUploadIcon, Loading03Icon } from '@hugeicons/core-free-icons';
   import { onMount } from 'svelte';
   import { addToast } from '$lib/stores/toast';
+  import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Checkbox from '$lib/components/Checkbox.svelte';
   import { fade } from 'svelte/transition';
@@ -34,8 +39,14 @@
     semesters: Semester[];
   };
 
-  let isLoading = $state(true);
+  let showConfigModal = $state(false);
   let isSavingConfig = $state(false);
+
+  // Confirm Modal state
+  let isConfirmOpen = $state(false);
+  let confirmTitle = $state('');
+  let confirmMessage = $state('');
+  let onConfirmAction = $state<() => void>(() => {});
   let isUploadingCsv = $state(false);
 
   async function handleCsvUpload(e: Event) {
@@ -139,6 +150,8 @@
     }
   }
 
+  let isLoading = $state(true);
+
   onMount(() => {
     loadData();
   });
@@ -210,10 +223,14 @@
   }
 
   function deleteExam(semIdx: number, examIdx: number) {
-    if (!confirm('Remove this exam?')) return;
-    config.semesters[semIdx].exams = config.semesters[semIdx].exams.filter((_, i) => i !== examIdx);
-    config.semesters = config.semesters.filter(s => s.exams.length > 0);
-    saveConfig();
+    confirmTitle = 'Delete Exam';
+    confirmMessage = 'Remove this exam? This action cannot be undone.';
+    onConfirmAction = () => {
+      config.semesters[semIdx].exams = config.semesters[semIdx].exams.filter((_, i) => i !== examIdx);
+      config.semesters = config.semesters.filter(s => s.exams.length > 0);
+      saveConfig();
+    };
+    isConfirmOpen = true;
   }
 
   async function uploadSeating(e: Event) {
@@ -224,10 +241,12 @@
   }
 </script>
 
-<div class="p-6 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-300">
-  <div class="flex flex-col sm:flex-row sm:items-center items-start justify-between gap-4">
+<div class="p-6 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300 h-full flex flex-col">
+  <ConfirmModal bind:isOpen={isConfirmOpen} title={confirmTitle} message={confirmMessage} onConfirm={onConfirmAction} confirmText="Delete" />
+  
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight text-foreground">Exams & Seating</h1>
+      <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">Exams & Seating</h1>
       <p class="text-sm text-muted-foreground mt-1">Manage global settings and detailed semester exam schedules.</p>
     </div>
     <div class="flex items-center gap-4">
@@ -261,10 +280,10 @@
             
             
             <div class="space-y-4">
-              <h4 class="text-xs font-semibold text-foreground uppercase tracking-wider mb-2">Semester Settings</h4>
+              <h4 class="text-xs font-semibold text-foreground   mb-2">Semester Settings</h4>
               <div class="grid grid-cols-3 gap-3">
                 <div class="space-y-1.5 col-span-1">
-                  <label for="semId" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Semester</label>
+                  <label for="semId" class="text-xs font-semibold text-muted-foreground  ">Semester</label>
                   <input id="semId" type="number" bind:value={editingExam.semId} oninput={() => {
                     setTimeout(() => {
                       const existing = config.semesters.find(s => s.semester === editingExam.semId);
@@ -277,13 +296,13 @@
                   }} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
                 </div>
                 <div class="space-y-1.5 col-span-2">
-                  <label for="periodName" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Period Name</label>
+                  <label for="periodName" class="text-xs font-semibold text-muted-foreground  ">Period Name</label>
                   <input id="periodName" type="text" bind:value={editingExam.periodName} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="Mid Semester" />
                 </div>
               </div>
               
               <div class="space-y-1.5">
-                <label for="seatingUrl" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Seating CSV URL (Sem {editingExam.semId})</label>
+                <label for="seatingUrl" class="text-xs font-semibold text-muted-foreground  ">Seating CSV URL (Sem {editingExam.semId})</label>
                 <div class="flex flex-col sm:flex-row gap-2 sm:items-center min-w-0">
                   <input type="file" accept=".csv" onchange={handleCsvUpload} class="hidden" id="csvUpload" />
                   <label for="csvUpload" class="cursor-pointer px-3 py-1.5 bg-muted/50 text-foreground text-xs font-medium rounded-md hover:bg-muted transition-colors whitespace-nowrap flex items-center gap-2">
@@ -296,31 +315,31 @@
             </div>
 
             <div class="space-y-4">
-              <h4 class="text-xs font-semibold text-foreground uppercase tracking-wider mb-2">Exam Details</h4>
+              <h4 class="text-xs font-semibold text-foreground   mb-2">Exam Details</h4>
               <div class="grid grid-cols-3 gap-3">
                 <div class="space-y-1.5 col-span-2">
-                  <label for="subject" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subject</label>
+                  <label for="subject" class="text-xs font-semibold text-muted-foreground  ">Subject</label>
                   <input id="subject" type="text" bind:value={editingExam.subject} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="Mathematics" />
                 </div>
                 <div class="space-y-1.5 col-span-1">
-                  <label for="code" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Code</label>
+                  <label for="code" class="text-xs font-semibold text-muted-foreground  ">Code</label>
                   <input id="code" type="text" bind:value={editingExam.code} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="CS101" />
                 </div>
               </div>
 
               <div class="grid grid-cols-2 gap-3">
                 <div class="space-y-1.5">
-                  <label for="date" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</label>
+                  <label for="date" class="text-xs font-semibold text-muted-foreground  ">Date</label>
                   <input id="date" type="date" bind:value={editingExam.date} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
                 </div>
                 <div class="space-y-1.5">
-                  <label for="time" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Time</label>
+                  <label for="time" class="text-xs font-semibold text-muted-foreground  ">Time</label>
                   <input id="time" type="text" bind:value={editingExam.time} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="10:00 AM" />
                 </div>
               </div>
 
               <div class="space-y-1.5">
-                <label for="duration" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration</label>
+                <label for="duration" class="text-xs font-semibold text-muted-foreground  ">Duration</label>
                 <input id="duration" type="text" bind:value={editingExam.duration} required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="2 Hours" />
               </div>
 
@@ -359,19 +378,19 @@
 
           <div class="space-y-4">
             <div class="space-y-1.5">
-              <label for="rotInt" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rotation Interval (ms)</label>
+              <label for="rotInt" class="text-xs font-semibold text-muted-foreground  ">Rotation Interval (ms)</label>
               <input id="rotInt" type="number" bind:value={config.viewRotationInterval} onchange={saveConfig} class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
             </div>
             <div class="space-y-1.5">
-              <label for="showBefore" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Show Card Before (Days)</label>
+              <label for="showBefore" class="text-xs font-semibold text-muted-foreground  ">Show Card Before (Days)</label>
               <input id="showBefore" type="number" bind:value={config.showBeforeDays} onchange={saveConfig} class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
             </div>
             <div class="space-y-1.5">
-              <label for="vivaBefore" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Show Viva Before (Days)</label>
+              <label for="vivaBefore" class="text-xs font-semibold text-muted-foreground  ">Show Viva Before (Days)</label>
               <input id="vivaBefore" type="number" bind:value={config.showBeforeDaysViva} onchange={saveConfig} class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
             </div>
             <div class="space-y-1.5">
-              <label for="defCover" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Default Cover Image</label>
+              <label for="defCover" class="text-xs font-semibold text-muted-foreground  ">Default Cover Image</label>
               <input id="defCover" type="url" bind:value={config.defaultCoverImage} onchange={saveConfig} class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" placeholder="https://" />
             </div>
           </div>
@@ -405,7 +424,7 @@
         {:else}
           <div class="overflow-x-auto border border-border/50 rounded-xl bg-card/30">
             <table class="w-full text-sm text-left">
-              <thead class="bg-muted/30 text-muted-foreground border-b border-border/50 text-[10px] uppercase tracking-wider font-semibold">
+              <thead class="bg-muted/30 text-muted-foreground border-b border-border/50 text-[10px]   font-semibold">
                 <tr>
                   <th class="px-4 py-3">Sem</th>
                   <th class="px-4 py-3">Subject</th>

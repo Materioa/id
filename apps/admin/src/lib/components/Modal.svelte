@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, type Snippet } from 'svelte';
   import { X } from 'lucide-svelte';
   import { fade, fly } from 'svelte/transition';
 
@@ -19,13 +19,15 @@
     title = '',
     maxWidthClass = 'sm:max-w-lg',
     onClose,
+    header,
     children
   }: {
     isOpen?: boolean;
     title?: string;
     maxWidthClass?: string;
     onClose?: () => void;
-    children?: any;
+    header?: Snippet;
+    children?: Snippet;
   } = $props();
 
   function handleClose() {
@@ -72,12 +74,26 @@
       </div>
 
       <!-- Header -->
-      {#if title}
-        <div class="flex items-center justify-between px-6 pt-4 pb-2 sm:py-6 border-b border-border/50">
-          <h2 class="text-lg font-semibold text-foreground">{title}</h2>
+      {#if header}
+        <div class="flex items-center justify-between px-6 pt-4 pb-2 sm:py-5 border-b border-border/50 gap-3">
+          <div class="flex-1 min-w-0">
+            {@render header()}
+          </div>
+          <button 
+            onclick={handleClose}
+            class="p-2 -mr-2 rounded-full hover:bg-muted text-muted-foreground active:scale-[0.95] transition-all shrink-0"
+            aria-label="Close"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+      {:else if title}
+        <div class="flex items-center justify-between px-6 pt-4 pb-2 sm:py-5 border-b border-border/50">
+          <h2 class="text-xl font-serif font-normal text-foreground tracking-tight">{title}</h2>
           <button 
             onclick={handleClose}
             class="p-2 -mr-2 rounded-full hover:bg-muted text-muted-foreground active:scale-[0.95] transition-all"
+            aria-label="Close"
           >
             <X class="w-5 h-5" />
           </button>
@@ -87,6 +103,7 @@
           <button 
             onclick={handleClose}
             class="p-2 rounded-full bg-background/50 backdrop-blur-sm hover:bg-muted text-muted-foreground active:scale-[0.95] transition-all"
+            aria-label="Close"
           >
             <X class="w-5 h-5" />
           </button>

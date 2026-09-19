@@ -1,3 +1,7 @@
+<svelte:head>
+  <title>Stats</title>
+</svelte:head>
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { makeAdminRequest } from '$lib/api/admin';
@@ -44,7 +48,7 @@
 <div class="space-y-6 max-w-6xl mx-auto" in:fade>
   <div class="flex flex-col sm:flex-row sm:sm:items-center items-start justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight text-foreground">Reading Insights</h1>
+      <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">Reading Insights</h1>
       <p class="text-sm text-muted-foreground mt-1">View top readers and most popular materials.</p>
     </div>
     

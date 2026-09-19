@@ -1,8 +1,15 @@
+<svelte:head>
+  <title>Bans</title>
+</svelte:head>
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { makeAdminRequest } from '$lib/api/admin';
   import { addToast } from '$lib/stores/toast';
+  import ConfirmModal from '$lib/components/ConfirmModal.svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { CheckmarkBadge01Icon } from '@hugeicons/core-free-icons';
 
   interface UserSearchResult {
     id: string;
@@ -52,6 +59,14 @@
   // Reason
   let newReason = $state('');
   let isBanning = $state(false);
+  let activeTab = $state<'active' | 'history'>('active');
+  let isSubmitting = $state(false);
+
+  // Confirm Modal state
+  let isConfirmOpen = $state(false);
+  let confirmTitle = $state('');
+  let confirmMessage = $state('');
+  let onConfirmAction = $state<() => void>(() => {});
 
   async function loadBans() {
     isLoading = true;
@@ -168,14 +183,19 @@
     }
   }
 
-  async function deleteBan(id: string) {
-    if (!confirm('Are you sure you want to lift this ban?')) return;
-    try {
-      await makeAdminRequest(`bans?id=${id}`, 'DELETE');
-      await loadBans();
-    } catch (e: any) {
-      addToast(`Error: ${e.message}`, 'error');
-    }
+  async function liftBan(ban: ModerationRule) {
+    confirmTitle = 'Lift Ban';
+    confirmMessage = 'Are you sure you want to lift this ban?';
+    onConfirmAction = async () => {
+      try {
+        await makeAdminRequest(`bans?id=${ban.id}`, 'DELETE');
+        addToast('Ban lifted successfully', 'success');
+        await loadBans();
+      } catch (e: any) {
+        addToast(`Failed to lift ban: ${e.message}`, 'error');
+      }
+    };
+    isConfirmOpen = true;
   }
 
   onMount(() => {
@@ -216,9 +236,11 @@
   }
 }} />
 
-<div class="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+<div class="p-6 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
+  <ConfirmModal bind:isOpen={isConfirmOpen} title={confirmTitle} message={confirmMessage} onConfirm={onConfirmAction} confirmText="Lift Ban" />
+
   <div>
-    <h1 class="text-2xl font-bold tracking-tight text-foreground">Ban Management</h1>
+    <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">Ban Management</h1>
     <p class="text-sm text-muted-foreground mt-1">Warn or ban abusive identities and Materio IDs.</p>
   </div>
 
@@ -255,7 +277,7 @@
       <div class="space-y-4">
         {#if banType === 'account'}
           <div class="space-y-1.5 relative combobox-wrapper">
-            <label for="userComboboxInput" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+            <label for="userComboboxInput" class="text-xs font-semibold text-muted-foreground   block">
               User *
             </label>
 
@@ -332,23 +354,23 @@
           </div>
         {:else}
           <div class="space-y-1.5">
-            <label for="anonId" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Anon ID</label>
+            <label for="anonId" class="text-xs font-semibold text-muted-foreground  ">Anon ID</label>
             <input type="text" id="anonId" bind:value={newAnonId} placeholder="from analytics" class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all font-mono" />
           </div>
           
           <div class="space-y-1.5">
-            <label for="fingerprint" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Device Fingerprint</label>
+            <label for="fingerprint" class="text-xs font-semibold text-muted-foreground  ">Device Fingerprint</label>
             <input type="text" id="fingerprint" bind:value={newFingerprint} placeholder="fingerprint hash" class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all font-mono" />
           </div>
           
           <div class="space-y-1.5">
-            <label for="ip" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">IP Address</label>
+            <label for="ip" class="text-xs font-semibold text-muted-foreground  ">IP Address</label>
             <input type="text" id="ip" bind:value={newIp} placeholder="x.x.x.x" class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all font-mono" />
           </div>
         {/if}
 
         <div class="space-y-1.5">
-          <label for="reason" class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Reason for Ban *</label>
+          <label for="reason" class="text-xs font-semibold text-muted-foreground  ">Reason for Ban *</label>
           <input type="text" id="reason" bind:value={newReason} placeholder="e.g. Abusive behavior, spam" required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
         </div>
 
@@ -426,7 +448,7 @@
               <!-- Identifier & Reason -->
               <div class="space-y-1.5 pt-1 text-xs">
                 <div class="flex items-center gap-1.5 text-muted-foreground font-mono bg-muted/30 px-2.5 py-1.5 rounded-lg border border-border/30 break-all text-[11px]">
-                  <span class="text-[10px] uppercase font-semibold text-muted-foreground/80 tracking-wider shrink-0">ID:</span>
+                  <span class="text-[10px]  font-semibold text-muted-foreground/80  shrink-0">ID:</span>
                   <span class="truncate">{ban.target_type === 'account' ? (ban.email || ban.user_id || '-') : (ban.anon_id || ban.fingerprint || ban.ip || '-')}</span>
                 </div>
 
@@ -444,7 +466,7 @@
                 </span>
                 <button
                   type="button"
-                  onclick={() => deleteBan(ban.id)}
+                  onclick={() => liftBan(ban)}
                   class="btn-base btn-secondary !px-3 !py-1 text-xs text-destructive hover:bg-destructive/10 transition-colors"
                 >
                   Unban
@@ -519,12 +541,8 @@
                       {new Date(ban.created_at).toLocaleDateString()}
                     </td>
                     <td class="px-6 py-4 text-right">
-                      <button 
-                        type="button"
-                        onclick={() => deleteBan(ban.id)} 
-                        class="text-muted-foreground hover:text-destructive px-2 py-1 rounded hover:bg-destructive/10 transition-all text-xs font-medium"
-                      >
-                        Unban
+                      <button onclick={() => liftBan(ban)} class="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Lift Ban">
+                        <HugeiconsIcon icon={CheckmarkBadge01Icon} size={16} />
                       </button>
                     </td>
                   </tr>

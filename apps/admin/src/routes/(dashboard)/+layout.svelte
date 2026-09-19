@@ -291,12 +291,7 @@
         <div class="space-y-6 pt-4 pb-4">
           <!-- Admin Category -->
           <div>
-            {#if !(isCollapsed && !isMobileMenuOpen)}
-              <div class="w-full flex items-center justify-between px-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 transition-colors">
-                <span>Admin Dashboard</span>
-              </div>
-            {/if}
-            
+
             <nav class="space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">
               {#each adminNav as item}
                 <a 

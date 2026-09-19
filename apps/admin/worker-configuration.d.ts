@@ -3,6 +3,10 @@
 // Runtime types generated with workerd@1.20260820.1 2026-08-22 nodejs_als
 interface __BaseEnv_Env {
 	ASSETS: Fetcher;
+	CLOUDINARY_CLOUD_NAME?: string;
+	CLOUDINARY_API_KEY?: string;
+	CLOUDINARY_API_SECRET?: string;
+	CLOUDINARY_URL?: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
