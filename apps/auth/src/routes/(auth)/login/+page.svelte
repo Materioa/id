@@ -417,8 +417,8 @@
       {:else}
         
         <!-- Animated Bud Logo Brand Header -->
-        <div class="flex justify-center mb-6">
-          <BudLogo class="w-16 h-16 text-foreground" />
+        <div class="flex justify-center mb-6 pt-4 overflow-visible">
+          <BudLogo class="w-16 h-16 text-foreground overflow-visible" />
         </div>
 
         <!-- Section Header -->

@@ -463,6 +463,8 @@
   viewBox="0 0 254 268"
   fill="none"
   xmlns="http://www.w3.org/2000/svg"
+  overflow="visible"
+  style="overflow:visible"
 >
   <g filter={`url(#${filterId})`}>
     <g bind:this={bodyGroup}>
