@@ -20,6 +20,7 @@ export function getAppUrls(currentOrigin) {
 
   if (isLocal) {
     return {
+      app: 'https://getmaterio.app',
       accounts: 'http://localhost:5173',
       auth: 'http://localhost:5174',
       admin: 'http://localhost:5175'
@@ -27,6 +28,7 @@ export function getAppUrls(currentOrigin) {
   }
 
   return {
+    app: 'https://getmaterio.app',
     accounts: 'https://accounts.getmaterio.app',
     auth: 'https://auth.getmaterio.app',
     admin: 'https://admin.getmaterio.app'

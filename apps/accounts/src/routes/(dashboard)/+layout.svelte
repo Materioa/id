@@ -9,7 +9,9 @@
     Logout01Icon,
     Home01Icon,
     CreditCardIcon,
-    Database02Icon
+    Database02Icon,
+    Globe02Icon,
+    Shield01Icon
   } from '@hugeicons/core-free-icons';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
@@ -22,6 +24,8 @@
   // Sidebar states
   let isCollapsed = $state(false);
   let isMobileMenuOpen = $state(false);
+  let appUrls = $state(getAppUrls());
+  let hasAdminPrivileges = $derived(Boolean(userStore.user?.hasAdminPrivileges || userStore.user?.has_admin_privileges || userStore.isAdmin));
 
   // Suspension states
   let isSuspended = $state(false);
@@ -156,6 +160,8 @@
     }
 
     initSession();
+
+    appUrls = getAppUrls(window.location.origin);
 
     const savedState = localStorage.getItem('sidebar_collapsed');
     if (savedState) isCollapsed = savedState === 'true';
@@ -299,6 +305,65 @@
 
     <!-- Sidebar Footer (Sticky) -->
     <div class="px-2 pb-2 pt-2 space-y-1 sticky bottom-0 z-20 bg-background md:bg-transparent">
+      <!-- Quick App / Admin Switcher -->
+      <div class="flex justify-center {(isCollapsed && !isMobileMenuOpen) ? 'mb-2' : 'mb-2 px-1'}">
+        {#if (isCollapsed && !isMobileMenuOpen)}
+          {#if hasAdminPrivileges}
+            <div class="flex flex-col gap-1 w-full">
+              <a 
+                href={appUrls.app || 'https://getmaterio.app'} 
+                class="w-full aspect-square flex items-center justify-center rounded-lg bg-card border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shadow-xs"
+                title="Go to app"
+              >
+                <HugeiconsIcon icon={Globe02Icon} size={15} />
+              </a>
+              <a 
+                href={appUrls.admin} 
+                class="w-full aspect-square flex items-center justify-center rounded-lg bg-card border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shadow-xs"
+                title="Go to admin"
+              >
+                <HugeiconsIcon icon={Shield01Icon} size={15} />
+              </a>
+            </div>
+          {:else}
+            <a 
+              href={appUrls.app || 'https://getmaterio.app'} 
+              class="w-full aspect-square flex items-center justify-center rounded-lg bg-card border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shadow-xs"
+              title="Go to app"
+            >
+              <HugeiconsIcon icon={Globe02Icon} size={15} />
+            </a>
+          {/if}
+        {:else}
+          {#if hasAdminPrivileges}
+            <div class="flex items-center gap-1 w-full">
+              <a 
+                href={appUrls.app || 'https://getmaterio.app'} 
+                class="flex-1 flex items-center justify-center py-1.5 px-2 text-xs font-medium rounded-l-full rounded-r-[5px] bg-muted/70 hover:bg-muted text-foreground border border-border/70 hover:border-border transition-all text-center truncate shadow-2xs active:scale-[0.98]"
+                title="Go to app"
+              >
+                <span class="truncate">Go to app</span>
+              </a>
+              <a 
+                href={appUrls.admin} 
+                class="flex-1 flex items-center justify-center py-1.5 px-2 text-xs font-medium rounded-l-[5px] rounded-r-full bg-muted/70 hover:bg-muted text-foreground border border-border/70 hover:border-border transition-all text-center truncate shadow-2xs active:scale-[0.98]"
+                title="Go to admin"
+              >
+                <span class="truncate">Go to admin</span>
+              </a>
+            </div>
+          {:else}
+            <a 
+              href={appUrls.app || 'https://getmaterio.app'} 
+              class="w-full flex items-center justify-center py-1.5 px-3 text-xs font-medium rounded-full bg-muted/70 hover:bg-muted text-foreground border border-border/70 hover:border-border transition-all text-center truncate shadow-2xs active:scale-[0.98]"
+              title="Go to app"
+            >
+              <span class="truncate">Go to app</span>
+            </a>
+          {/if}
+        {/if}
+      </div>
+
       <!-- Theme Switcher Pill -->
       <div class="flex justify-center {(isCollapsed && !isMobileMenuOpen) ? 'mb-4' : 'mb-2 px-1'}">
         {#if (isCollapsed && !isMobileMenuOpen)}

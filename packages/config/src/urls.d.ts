@@ -1,4 +1,5 @@
 export interface AppUrls {
+  app: string;
   accounts: string;
   auth: string;
   admin: string;

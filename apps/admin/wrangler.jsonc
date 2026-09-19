@@ -10,9 +10,7 @@
   "routes": [{"pattern": "admin.getmaterio.app", "zone_name": "getmaterio.app", "custom_domain": true, "enabled": true, "previews_enabled": false}],
   "vars": {
     "CLOUDINARY_CLOUD_NAME": "dvsdsl7iw",
-    "CLOUDINARY_API_KEY": "412819653886923",
-    "CLOUDINARY_API_SECRET": "LPARAweIryTEMsJ_tmv4-RtkFGs",
-    "CLOUDINARY_URL": "cloudinary://412819653886923:LPARAweIryTEMsJ_tmv4-RtkFGs@dvsdsl7iw"
+    "CLOUDINARY_API_KEY": "412819653886923"
   },
   "observability": {"logs": {"enabled": true}, "traces": {"enabled": true}}
 }

@@ -12,7 +12,9 @@
     TestTube01Icon,
     Notification01Icon,
     UserAdd01Icon,
-    ShieldAlertIcon
+    ShieldAlertIcon,
+    Globe02Icon,
+    UserIcon
   } from '@hugeicons/core-free-icons';
   import { onMount } from 'svelte';
   import { userStore } from '$lib/stores/user.svelte';
@@ -29,6 +31,7 @@
   // Sidebar states
   let isCollapsed = $state(false);
   let isMobileMenuOpen = $state(false);
+  let appUrls = $state(getAppUrls());
 
   // Theme states
   let theme = $state('system'); // 'light', 'dark', 'system'
@@ -182,6 +185,8 @@
 
     initSession();
 
+    appUrls = getAppUrls(window.location.origin);
+
     const savedState = localStorage.getItem('sidebar_collapsed');
     if (savedState) isCollapsed = savedState === 'true';
 
@@ -313,6 +318,45 @@
 
       <!-- Sidebar Footer (Sticky) -->
       <div class="px-2 pb-2 pt-2 space-y-1 sticky bottom-0 z-20 bg-background md:bg-transparent">
+        <!-- Quick App / Account Switcher -->
+        <div class="flex justify-center {(isCollapsed && !isMobileMenuOpen) ? 'mb-2' : 'mb-2 px-1'}">
+          {#if (isCollapsed && !isMobileMenuOpen)}
+            <div class="flex flex-col gap-1 w-full">
+              <a 
+                href={appUrls.app || 'https://getmaterio.app'} 
+                class="w-full aspect-square flex items-center justify-center rounded-lg bg-card border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shadow-xs"
+                title="Go to app"
+              >
+                <HugeiconsIcon icon={Globe02Icon} size={15} />
+              </a>
+              <a 
+                href={`${appUrls.accounts}/overview`} 
+                class="w-full aspect-square flex items-center justify-center rounded-lg bg-card border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shadow-xs"
+                title="Go to account"
+              >
+                <HugeiconsIcon icon={UserIcon} size={15} />
+              </a>
+            </div>
+          {:else}
+            <div class="flex items-center gap-1 w-full">
+              <a 
+                href={appUrls.app || 'https://getmaterio.app'} 
+                class="flex-1 flex items-center justify-center py-1.5 px-2 text-xs font-medium rounded-l-full rounded-r-[5px] bg-muted/70 hover:bg-muted text-foreground border border-border/70 hover:border-border transition-all text-center truncate shadow-2xs active:scale-[0.98]"
+                title="Go to app"
+              >
+                <span class="truncate">Go to app</span>
+              </a>
+              <a 
+                href={`${appUrls.accounts}/overview`} 
+                class="flex-1 flex items-center justify-center py-1.5 px-2 text-xs font-medium rounded-l-[5px] rounded-r-full bg-muted/70 hover:bg-muted text-foreground border border-border/70 hover:border-border transition-all text-center truncate shadow-2xs active:scale-[0.98]"
+                title="Go to account"
+              >
+                <span class="truncate">Go to account</span>
+              </a>
+            </div>
+          {/if}
+        </div>
+
         <!-- Theme Switcher Pill -->
         <div class="flex justify-center {(isCollapsed && !isMobileMenuOpen) ? 'mb-4' : 'mb-2 px-1'}">
           {#if (isCollapsed && !isMobileMenuOpen)}
