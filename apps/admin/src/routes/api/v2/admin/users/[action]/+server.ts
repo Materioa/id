@@ -44,6 +44,32 @@ export async function POST({ request, params }) {
       .single();
       
     if (error) throw error;
+
+    // Admin-granted Plus is a lifetime grant — record a ₹0 receipt for invoices.
+    // (One per user; repeated toggles must not stack receipts.)
+    if (action === 'toggle-plus' && body.makePlus === true) {
+      try {
+        const { data: existing } = await supabaseAdmin
+          .from('payments')
+          .select('id')
+          .eq('user_id', body.userId)
+          .eq('provider', 'gift')
+          .limit(1)
+          .maybeSingle();
+        if (!existing) {
+          await supabaseAdmin.from('payments').insert({
+            user_id: body.userId,
+            plan: 'pro',
+            amount_paise: 0,
+            currency: 'inr',
+            status: 'succeeded',
+            provider: 'gift',
+            period_start: new Date().toISOString(),
+            period_end: null
+          });
+        }
+      } catch {}
+    }
     
     return json({ success: true, user: data });
   } catch (error: any) {

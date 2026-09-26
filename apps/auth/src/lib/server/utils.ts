@@ -132,8 +132,8 @@ export const verifyToken = async (token: string) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     
-    // Check if session exists in DB for proper revocation
-    if (decoded.jti && decoded.token_use !== '2fa_temp') {
+    // Check if session exists in DB for proper revocation (only for web dashboard sessions, not OAuth access tokens)
+    if (decoded.jti && decoded.token_use !== '2fa_temp' && !decoded.client_id) {
       const { data: session } = await supabaseAdmin
         .from('user_sessions')
         .select('id')

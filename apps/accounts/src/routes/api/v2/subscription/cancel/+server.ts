@@ -12,7 +12,7 @@ export async function POST({ request }: any) {
     // Get user details
     const { data: user, error: userErr } = await supabaseAdmin
       .from('users')
-      .select('id, is_plus_user, is_lite_user, has_admin_privileges')
+      .select('id, is_plus_user, is_lite_user, has_admin_privileges, provider_subscription_id')
       .eq('id', (decoded as any).id)
       .single();
 
@@ -33,13 +33,19 @@ export async function POST({ request }: any) {
       return json({ error: 'No active subscription to cancel' }, { status: 400 });
     }
 
-    // Cancel the subscription
+    // Cancel the subscription (legacy gift-code path also clears billing fields)
     const { error: updateErr } = await supabaseAdmin
       .from('users')
       .update({
         is_plus_user: false,
         is_lite_user: false,
-        lite_expiry: null
+        lite_expiry: null,
+        provider: null,
+        provider_subscription_id: null,
+        provider_order_id: null,
+        subscription_plan: null,
+        subscription_status: 'cancelled',
+        subscription_current_period_end: null
       })
       .eq('id', user.id);
 

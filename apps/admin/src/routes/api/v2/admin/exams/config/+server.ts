@@ -36,9 +36,13 @@ export async function POST({ request }) {
     const body = await request.json() as any;
     const db = await getDb();
     
+    const updateData = { ...body };
+    delete updateData._id;
+    delete updateData.id;
+
     await db.collection('examdata').updateOne(
       {},
-      { $set: body },
+      { $set: updateData },
       { upsert: true }
     );
     

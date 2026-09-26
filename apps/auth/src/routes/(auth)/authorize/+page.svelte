@@ -157,36 +157,60 @@
   const permissionsList = $derived.by(() => {
     const scopesArray = scope.split(/\s+/).filter(Boolean);
     const perms = [];
-    
+
     const hasOpenId = scopesArray.includes('openid');
     const hasProfile = scopesArray.includes('profile');
     const hasEmail = scopesArray.includes('email');
-    const hasAdmin = scopesArray.includes('admin') || scopesArray.length === 0;
+    const hasAdmin = scopesArray.includes('admin');
+    const hasSubscription = scopesArray.some(s => ['pro', 'plus', 'subscription'].includes(s));
+    const hasOffline = scopesArray.includes('offline_access');
 
+    // 1. Profile / Identity
     if (hasOpenId || hasProfile || hasEmail) {
       perms.push({
-        name: 'Access Profile Information',
-        desc: 'View your display name, username, and email address.'
+        name: 'Basic profile info',
+        desc: 'Your name, username, and profile photo.'
       });
     }
 
+    if (hasEmail) {
+      perms.push({
+        name: 'Email address',
+        desc: 'Your email address, for account identification and notifications.'
+      });
+    }
+
+    // 2. Subscription & Tier Gating
+    if (hasSubscription) {
+      perms.push({
+        name: 'Subscription status',
+        desc: 'Whether you have an active subscription.'
+      });
+    }
+
+    // 3. Admin Tools
     if (hasAdmin) {
       perms.push({
-        name: 'Verify Access Level',
-        desc: 'Allow the application to verify your Materio ID roles and permissions.'
+        name: 'Admin access',
+        desc: 'Create and manage exam schedules, announcements, and platform settings.'
       });
     }
 
+    // 4. Offline / Continuous Session
+    if (hasOffline) {
+      perms.push({
+        name: 'Stay signed in',
+        desc: "Access your account when you're not actively using this app."
+      });
+    }
+
+    // 5. Fallback for unknown scopes
+    const handled = ['openid', 'profile', 'email', 'admin', 'pro', 'plus', 'subscription', 'offline_access'];
     for (const s of scopesArray) {
-      if (!['openid', 'profile', 'email', 'admin', 'offline_access'].includes(s)) {
+      if (!handled.includes(s)) {
         perms.push({
-          name: `Access ${s.charAt(0).toUpperCase() + s.slice(1)} Data`,
-          desc: `Read and manage resources related to the "${s}" scope.`
-        });
-      } else if (s === 'offline_access') {
-        perms.push({
-          name: 'Maintain Offline Access',
-          desc: 'Keep the session active so the app can function when you are not present.'
+          name: `${s.charAt(0).toUpperCase() + s.slice(1)} access`,
+          desc: `View and manage data related to "${s}".`
         });
       }
     }

@@ -86,6 +86,26 @@ async function getFormConfigsCollection() {
 }
 
 /**
+ * Get the interviewer sessions collection (conversational transcripts).
+ * @returns {Promise<import('mongodb').Collection>}
+ */
+async function getInterviewerSessionsCollection() {
+    const database = await getMongoDb();
+    return database.collection('interviewer_sessions');
+}
+
+/**
+ * Get the form responses collection (final structured answers).
+ * New collection for Materio Interviewer: one doc per completed/skipped run,
+ * tied to its parent form/wizard via formId + kind.
+ * @returns {Promise<import('mongodb').Collection>}
+ */
+async function getFormResponsesCollection() {
+    const database = await getMongoDb();
+    return database.collection('form_responses');
+}
+
+/**
  * Close MongoDB connection (for cleanup)
  */
 async function closeMongoConnection() {
@@ -101,5 +121,7 @@ module.exports = {
     getMongoDb,
     getFormsCollection,
     getFormConfigsCollection,
+    getInterviewerSessionsCollection,
+    getFormResponsesCollection,
     closeMongoConnection
 };

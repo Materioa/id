@@ -99,3 +99,12 @@ skills.json
 migrations/
 **/_config_shared
 **/_utils_shared
+# Secrets & Service Credentials (never commit real values)
+secrets/
+*.secret
+service-account*.json
+*-service-account.json
+.cloudflared/
+.cloudflare/
+wrangler-output/
+

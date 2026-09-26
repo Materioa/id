@@ -101,10 +101,11 @@ export async function POST({ request }: any) {
       return json({ error: 'This code has reached its maximum uses' }, { status: 410 });
     }
 
-    // Apply Pro subscription only after the redemption and usage count succeed.
+    // Apply a LIFETIME Pro grant (invite codes are the only forever path:
+    // provider purchases always carry a lite_expiry).
     const { error: updateErr } = await supabaseAdmin
       .from('users')
-      .update({ is_plus_user: true })
+      .update({ is_plus_user: true, lite_expiry: null, subscription_plan: 'pro', subscription_status: 'lifetime' })
       .eq('id', user.id);
 
     if (updateErr) {
@@ -122,6 +123,20 @@ export async function POST({ request }: any) {
       ]);
       return json({ error: 'Failed to apply subscription' }, { status: 500 });
     }
+
+    // Record a ₹0 receipt so lifetime holders get invoices too.
+    try {
+      await supabaseAdmin.from('payments').insert({
+        user_id: user.id,
+        plan: 'pro',
+        amount_paise: 0,
+        currency: 'inr',
+        status: 'succeeded',
+        provider: 'gift',
+        period_start: new Date().toISOString(),
+        period_end: null
+      });
+    } catch {}
 
     return json({
       success: true,

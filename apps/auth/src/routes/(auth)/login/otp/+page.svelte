@@ -9,7 +9,7 @@
   import AuthCard from '$lib/components/AuthCard.svelte';
   import LineArtBackground from '$lib/components/LineArtBackground.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import BudLogo from '$lib/components/BudLogo.svelte';
+  import BudLogo from '@materio/ui/components/BudLogo.svelte';
   import { ShieldAlert, ArrowLeft } from 'lucide-svelte';
   
   let email = $state('');

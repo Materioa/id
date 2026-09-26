@@ -69,6 +69,7 @@
     if (path.includes('/admin/uploads')) return ['Admin', 'Uploads'];
     if (path.includes('/admin/files')) return ['Admin', 'File Management'];
     if (path.includes('/admin/promotions')) return ['Admin', 'Promotions'];
+    if (path.includes('/admin/forms')) return ['Admin', 'Forms & Wizards'];
     if (path.includes('/admin/releases')) return ['Admin', 'Releases'];
     if (path.includes('/admin/exams')) return ['Admin', 'Exams & Seating'];
     if (path.includes('/admin/notifications')) return ['Admin', 'Notifications'];
@@ -83,6 +84,7 @@
     { name: 'Uploads', href: '/admin/uploads', icon: Upload01Icon },
     { name: 'File Management', href: '/admin/files', icon: Folder01Icon },
     { name: 'Promotions', href: '/admin/promotions', icon: Megaphone01Icon },
+    { name: 'Forms & Wizards', href: '/admin/forms', icon: Folder01Icon },
     { name: 'Releases', href: '/admin/releases', icon: CodeIcon },
     { name: 'Exams & Seating', href: '/admin/exams', icon: TestTube01Icon },
     { name: 'Notifications', href: '/admin/notifications', icon: Notification01Icon },
