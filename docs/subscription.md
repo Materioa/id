@@ -17,7 +17,10 @@ Authorization: Bearer <token>
 
 Lifetime grants (invite codes, admin grants) also record a **₹0 receipt** in
 `payments` (`provider = 'gift'`), so forever-plan holders get invoices and
-PDF downloads like everyone else. Run `migrations/005_lifetime_zero_receipts.sql`
+PDF downloads like everyone else. `GET /api/v2/billing/status` lazily creates
+the current calendar month's gift row on first check — so holders get one
+receipt now plus a fresh one every 1st, with `006_gift_monthly_dedup.sql`
+guarding duplicates. Run `migrations/005_lifetime_zero_receipts.sql`
 (it also relaxes the amount guard to `>= 0` and backfills existing holders).
 
 Every Razorpay activation/renewal sets `lite_expiry` (also mirrored to

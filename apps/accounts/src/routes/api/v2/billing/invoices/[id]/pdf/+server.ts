@@ -1,15 +1,16 @@
 import { corsJson as J, handleOptions, corsHeaders } from '$lib/server/cors';
 import { supabaseAdmin, verifyToken } from '$lib/server/utils';
 import { razorpayKeys, rzpFetch } from '$lib/server/razorpay';
+import { BILLING_PLANS } from '$lib/server/billing';
 
 export async function OPTIONS({ request }: any) {
   return handleOptions(request);
 }
 
 const PLAN_LABELS: Record<string, string> = {
-  plus: 'Materio Plus — Monthly subscription',
-  pro: 'Materio Pro — Monthly subscription',
-  weekly: 'Materio Pro · Weekly Pass — Weekly subscription'
+  plus: 'Materio Plus',
+  pro: 'Materio Pro',
+  weekly: 'Weekly Pass'
 };
 
 function periodLabel(startISO: string | null, endISO: string | null, plan: string | null): string {
@@ -62,6 +63,9 @@ export async function GET({ request, params }: any) {
     let periodEnd: string | null = null;
     let isGiftLifetime = false;
     let number = id;
+    let paymentId: string | null = null;
+    let subscriptionId: string | null = null;
+    let orderId: string | null = null;
 
     const { configured } = razorpayKeys();
     if (id.startsWith('inv_') && configured) {
@@ -85,7 +89,7 @@ export async function GET({ request, params }: any) {
         if (mine) {
           const { data: pay } = await supabaseAdmin
             .from('payments')
-            .select('plan, period_start, period_end')
+            .select('plan, period_start, period_end, provider_payment_id, provider_subscription_id, provider_order_id')
             .eq('user_id', decoded.id)
             .eq('provider_subscription_id', inv.subscription_id)
             .order('created_at', { ascending: false })
@@ -94,6 +98,9 @@ export async function GET({ request, params }: any) {
           plan = (pay as any)?.plan ?? null;
           periodStart = (pay as any)?.period_start ?? null;
           periodEnd = (pay as any)?.period_end ?? null;
+          paymentId = (pay as any)?.provider_payment_id ?? null;
+          subscriptionId = inv.subscription_id ?? null;
+          orderId = (pay as any)?.provider_order_id ?? null;
         }
       }
       if (!mine && inv.customer_details?.email) {
@@ -108,7 +115,7 @@ export async function GET({ request, params }: any) {
       // Our local payment record.
       const { data: row, error } = await supabaseAdmin
         .from('payments')
-        .select('id, plan, amount_paise, currency, status, provider, period_start, period_end, created_at')
+        .select('id, plan, amount_paise, currency, status, provider, provider_payment_id, provider_subscription_id, provider_order_id, period_start, period_end, created_at')
         .eq('id', id)
         .eq('user_id', decoded.id)
         .single();
@@ -119,6 +126,9 @@ export async function GET({ request, params }: any) {
       status = String((row as any).status || 'recorded');
       periodStart = (row as any).period_start;
       periodEnd = (row as any).period_end;
+      paymentId = (row as any).provider_payment_id ?? null;
+      subscriptionId = (row as any).provider_subscription_id ?? null;
+      orderId = (row as any).provider_order_id ?? null;
       number = String((row as any).id).slice(0, 8).toUpperCase();
       // Lifetime gift receipts never expire.
       if ((row as any).provider === 'gift' && amountPaise === 0) {
@@ -131,6 +141,20 @@ export async function GET({ request, params }: any) {
     let pdf: Uint8Array;
     try {
       const { buildInvoicePdf } = await import('$lib/server/invoice-pdf');
+      const planShort = plan === 'plus' ? 'Materio Plus' : plan === 'pro' ? 'Materio Pro' : plan === 'weekly' ? 'Weekly Pass' : 'Materio';
+      const isGift = isGiftLifetime;
+      // Gift receipts show the month they cover (not lifetime text).
+      let giftPeriod: string | null = null;
+      if (isGift) {
+        const base = periodStart ? new Date(periodStart) : dateISO ? new Date(dateISO) : new Date();
+        if (!Number.isNaN(base.getTime())) {
+          const first = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1));
+          const last = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0));
+          const f = (x: Date) => x.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+          giftPeriod = `${f(first)} – ${f(last)}`;
+        }
+      }
+      const unitPaise = isGift && plan && (BILLING_PLANS as any)[plan] ? (BILLING_PLANS as any)[plan].pricePaise : amountPaise;
       pdf = await buildInvoicePdf({
         number,
         dateISO,
@@ -139,8 +163,14 @@ export async function GET({ request, params }: any) {
         billedToEmail: (user as any).email || '',
         billedToUsername: (user as any).username || '',
         planLabel: (plan && PLAN_LABELS[plan]) || 'Materio subscription',
-        periodLabel: isGiftLifetime ? 'Lifetime access · never expires' : periodLabel(periodStart, periodEnd, plan),
-        amountPaise
+        planShort,
+        periodLabel: isGift && giftPeriod ? giftPeriod : periodLabel(periodStart, periodEnd, plan),
+        amountPaise,
+        isGift,
+        unitPaise,
+        paymentId,
+        subscriptionId,
+        orderId
       });
     } catch (e: any) {
       return J(request, { error: 'Failed to generate invoice PDF', details: e?.message }, 500);

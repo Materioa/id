@@ -44,6 +44,36 @@ export async function GET({ request }: any) {
     // Lifetime grants (paid flags, null expiry — invite codes / admin) never expire.
     let expired = false;
     const lifetime = !u.has_admin_privileges && (u.is_plus_user || u.is_lite_user) && !u.lite_expiry;
+    // Monthly ₹0 receipt for lifetime holders: one per calendar month,
+    // created on first status check of the month (covers "generate now"
+    // plus every 1st going forward — no cron needed on serverless).
+    if (lifetime && full) {
+      try {
+        const monthStart = new Date();
+        monthStart.setUTCDate(1);
+        monthStart.setUTCHours(0, 0, 0, 0);
+        const { data: existing } = await supabaseAdmin
+          .from('payments')
+          .select('id')
+          .eq('user_id', u.id)
+          .eq('provider', 'gift')
+          .gte('period_start', monthStart.toISOString())
+          .limit(1)
+          .maybeSingle();
+        if (!existing) {
+          await supabaseAdmin.from('payments').insert({
+            user_id: u.id,
+            plan: u.is_plus_user ? 'pro' : 'plus',
+            amount_paise: 0,
+            currency: 'inr',
+            status: 'succeeded',
+            provider: 'gift',
+            period_start: monthStart.toISOString(),
+            period_end: null
+          });
+        }
+      } catch {}
+    }
     if (!u.has_admin_privileges && (u.is_plus_user || u.is_lite_user) && u.lite_expiry && isExpired(u.lite_expiry)) {
       expired = true;
       if (full) {

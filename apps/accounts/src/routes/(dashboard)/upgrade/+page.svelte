@@ -7,7 +7,6 @@
     AlertCircleIcon,
     CheckmarkCircle01Icon,
     Cancel01Icon,
-    Crown02Icon,
     UserIcon,
     ZapIcon,
     Tick01Icon,
@@ -132,10 +131,10 @@
   let monthlyProActive = $derived(() => planKey() === 'pro' && !isWeekly());
   let proBilling = $state<'monthly' | 'weekly'>('monthly');
 
-  const planConfig: Record<string, { label: string; color: string; icon: any }> = {
-    super: { label: 'Materio Super', color: 'text-amber-500', icon: Crown02Icon },
-    pro: { label: 'Materio Pro', color: 'text-primary', icon: ZapIcon },
-    plus: { label: 'Materio Plus', color: 'text-emerald-500', icon: CreditCardIcon }
+  const planConfig: Record<string, { label: string }> = {
+    super: { label: 'Materio Super' },
+    pro: { label: 'Materio Pro' },
+    plus: { label: 'Materio Plus' }
   };
 
   function loginRedirect(next = '/upgrade') {
@@ -473,7 +472,6 @@
           <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
               <div class="flex items-center gap-2">
-                <HugeiconsIcon icon={config.icon} size={20} class={config.color} />
                 <h4 class="font-bold text-foreground text-lg">{config.label}</h4>
               </div>
               {#if plan}
