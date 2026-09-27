@@ -35,7 +35,7 @@ export async function GET({ request }: any) {
 
     const { data: payments } = await supabaseAdmin
       .from('payments')
-      .select('id, plan, amount_paise, currency, status, provider_subscription_id, provider_payment_id, period_start, period_end, created_at')
+      .select('id, plan, amount_paise, currency, status, provider, provider_subscription_id, provider_payment_id, provider_order_id, period_start, period_end, created_at')
       .eq('user_id', decoded.id)
       .order('created_at', { ascending: false })
       .limit(25);
@@ -62,9 +62,29 @@ export async function GET({ request }: any) {
     }
 
     const usedInv = new Set<string>();
+    const allRzp = [...rzpBySub.values()].flat();
+    // Match a local row to its Razorpay invoice: same subscription first,
+    // then same amount + close date (covers test-sub sprawl / id drift).
+    // Without the fallback, one charge shows as two rows (local + orphan).
+    const findMatch = (r: any) => {
+      const pool = allRzp.filter((inv: any) => !usedInv.has(inv.id));
+      let m = r.provider_subscription_id
+        ? pool.find((inv: any) => inv.subscription_id && inv.subscription_id === r.provider_subscription_id)
+        : undefined;
+      if (!m) {
+        const rt = new Date(r.created_at).getTime();
+        m = pool.find((inv: any) => {
+          const amt = inv.gross_amount ?? inv.amount;
+          if (amt == null || amt !== r.amount_paise) return false;
+          const rawTs = inv.date ?? inv.created_at;
+          const it = typeof rawTs === 'number' ? rawTs * 1000 : new Date(rawTs).getTime();
+          return Number.isFinite(it) && Number.isFinite(rt) && Math.abs(it - rt) <= 7 * 24 * 3600 * 1000;
+        });
+      }
+      return m;
+    };
     const invoices = rows.map((r: any) => {
-      const pool = (r.provider_subscription_id && rzpBySub.get(r.provider_subscription_id)) || [];
-      const match = pool.find((inv: any) => !usedInv.has(inv.id));
+      const match = findMatch(r);
       if (match) usedInv.add(match.id);
       return {
         id: match?.id ?? r.id,
@@ -74,7 +94,12 @@ export async function GET({ request }: any) {
         amountPaise: match?.gross_amount ?? match?.amount ?? r.amount_paise,
         currency: match?.currency?.toLowerCase?.() || r.currency || 'inr',
         status: match ? String(match.status || 'issued') : r.status,
+        periodStart: r.period_start ?? null,
         periodEnd: r.period_end ?? null,
+        paymentId: r.provider_payment_id ?? null,
+        subscriptionId: r.provider_subscription_id ?? (match?.subscription_id ?? null),
+        orderId: r.provider_order_id ?? null,
+        isGift: r.provider === 'gift' && (match?.gross_amount ?? match?.amount ?? r.amount_paise) === 0,
         downloadUrl: match?.short_url ?? null,
         receipt: match?.receipt ?? null
       };
@@ -92,7 +117,12 @@ export async function GET({ request }: any) {
           amountPaise: inv.gross_amount ?? inv.amount ?? 0,
           currency: (inv.currency || 'inr').toLowerCase(),
           status: String(inv.status || 'issued'),
+          periodStart: null,
           periodEnd: null,
+          paymentId: null,
+          subscriptionId: inv.subscription_id ?? null,
+          orderId: null,
+          isGift: false,
           downloadUrl: inv.short_url ?? null,
           receipt: inv.receipt ?? null
         });
@@ -101,7 +131,20 @@ export async function GET({ request }: any) {
 
     invoices.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
 
-    return J(request, { invoices, count: invoices.length });
+    // Coalesce historical double-records: same subscription + amount + same
+    // calendar day is one charge (webhook used to record activated+charged
+    // separately). Renewals are days apart, so this can't merge real ones.
+    const seen = new Set<string>();
+    const coalesced = invoices.filter((inv: any) => {
+      const sub = inv.subscriptionId || 'nosub';
+      const day = inv.date ? new Date(inv.date).toISOString().slice(0, 10) : '';
+      const k = `${sub}|${inv.amountPaise}|${day}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
+    return J(request, { invoices: coalesced, count: coalesced.length });
   } catch (e: any) {
     return J(request, { error: 'Internal server error', details: e?.message }, 500);
   }

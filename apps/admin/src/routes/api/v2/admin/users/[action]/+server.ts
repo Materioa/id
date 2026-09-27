@@ -46,8 +46,9 @@ export async function POST({ request, params }) {
     if (error) throw error;
 
     // Admin-granted Plus is a lifetime grant — record a ₹0 receipt for invoices.
-    // (One per user; repeated toggles must not stack receipts.)
-    if (action === 'toggle-plus' && body.makePlus === true) {
+    // (One per user; repeated toggles must not stack receipts. Skipped for
+    // fellow admins: Super access isn't a purchase and gets no receipts.)
+    if (action === 'toggle-plus' && body.makePlus === true && !(data as any)?.has_admin_privileges) {
       try {
         const { data: existing } = await supabaseAdmin
           .from('payments')

@@ -56,20 +56,54 @@ async function activateUser(
   else if (rzp.invoice) (update as any).last_invoice_id = rzp.invoice;
   const { error } = await supabaseAdmin.from('users').update(update).eq('id', userId);
   if (error) return false;
-  await recordPayment({
-    user_id: userId,
-    plan: plan.id,
-    amount_paise: plan.pricePaise,
-    currency: 'inr',
-    status: 'succeeded',
-    provider: 'razorpay',
-    provider_order_id: rzp.order ?? null,
-    provider_subscription_id: rzp.subscription ?? null,
-    provider_payment_id: rzp.payment ?? null,
-    provider_invoice_id: rzp.invoice ?? null,
-    period_start: new Date().toISOString(),
-    period_end: end
-  });
+  // Idempotency: Razorpay fires both subscription.activated AND
+  // subscription.charged for the first payment. Without this guard one
+  // purchase records two payment rows (two "invoices" in the UI).
+  // Renewals are days apart, so a 24h same-subscription window is safe.
+  try {
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { data: dup } = await supabaseAdmin
+      .from('payments')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('plan', plan.id)
+      .eq('status', 'succeeded')
+      .gte('created_at', dayAgo)
+      .limit(1)
+      .maybeSingle();
+    if (!dup) {
+      await recordPayment({
+        user_id: userId,
+        plan: plan.id,
+        amount_paise: plan.pricePaise,
+        currency: 'inr',
+        status: 'succeeded',
+        provider: 'razorpay',
+        provider_order_id: rzp.order ?? null,
+        provider_subscription_id: rzp.subscription ?? null,
+        provider_payment_id: rzp.payment ?? null,
+        provider_invoice_id: rzp.invoice ?? null,
+        period_start: new Date().toISOString(),
+        period_end: end
+      });
+    }
+  } catch {
+    // Receipt write must never break activation.
+    await recordPayment({
+      user_id: userId,
+      plan: plan.id,
+      amount_paise: plan.pricePaise,
+      currency: 'inr',
+      status: 'succeeded',
+      provider: 'razorpay',
+      provider_order_id: rzp.order ?? null,
+      provider_subscription_id: rzp.subscription ?? null,
+      provider_payment_id: rzp.payment ?? null,
+      provider_invoice_id: rzp.invoice ?? null,
+      period_start: new Date().toISOString(),
+      period_end: end
+    });
+  }
   return true;
 }
 

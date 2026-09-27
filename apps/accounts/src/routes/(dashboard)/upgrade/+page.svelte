@@ -7,11 +7,8 @@
     AlertCircleIcon,
     CheckmarkCircle01Icon,
     Cancel01Icon,
-    UserIcon,
-    ZapIcon,
     Tick01Icon,
     Invoice01Icon,
-    RefreshIcon,
     Download01Icon
   } from '@hugeicons/core-free-icons';
   import { onMount } from 'svelte';
@@ -347,37 +344,8 @@
     return `₹${(paise / 100).toLocaleString('en-IN')}`;
   }
 
-  let downloadingId = $state<string | null>(null);
-
-  async function downloadInvoice(inv: any) {
-    downloadingId = inv.id;
-    try {
-      const res = await fetch(`/api/v2/billing/invoices/${encodeURIComponent(inv.id)}/pdf`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (res.status === 401) {
-        loginRedirect();
-        return;
-      }
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as any;
-        throw new Error(data.error || data.details || `Failed to download invoice (HTTP ${res.status})`);
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const stamp = inv.date ? new Date(inv.date).toISOString().slice(0, 10) : 'receipt';
-      a.href = url;
-      a.download = `materio-invoice-${stamp}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    } catch (err: any) {
-      addToast(err.message, 'error', 'Download Failed');
-    } finally {
-      downloadingId = null;
-    }
+  function openInvoice(inv: any) {
+    window.open(`/invoices/${encodeURIComponent(inv.id)}/print`, '_blank', 'noopener');
   }
 
   async function loadInvoices() {
@@ -499,19 +467,12 @@
                 <p class="text-sm text-muted-foreground mt-0.5"><span class="font-medium">Monthly plan</span></p>
               {/if}
             </div>
-            {#if !isSuperUser() && planKey() && !isLifetime()}
+            {#if !isSuperUser() && planKey() === 'plus' && !isLifetime()}
               <div class="flex flex-col sm:flex-row gap-2 shrink-0">
-                {#if planKey() === 'plus'}
-                  <button onclick={() => startCheckout('pro')} disabled={checkoutBusy !== null} class="btn-base btn-primary">
-                    {#if checkoutBusy === 'pro'}<HugeiconsIcon icon={Loading01Icon} size={16} class="animate-spin" />{:else}<HugeiconsIcon icon={ZapIcon} size={16} />{/if}
-                    <span>Upgrade to Pro</span>
-                  </button>
-                {:else}
-                  <button onclick={() => startCheckout('plus')} disabled={checkoutBusy !== null} class="btn-base btn-secondary">
-                    {#if checkoutBusy === 'plus'}<HugeiconsIcon icon={Loading01Icon} size={16} class="animate-spin" />{:else}<HugeiconsIcon icon={RefreshIcon} size={16} />{/if}
-                    <span>Switch to Plus</span>
-                  </button>
-                {/if}
+                <button onclick={() => startCheckout('pro')} disabled={checkoutBusy !== null} class="btn-base btn-primary">
+                  {#if checkoutBusy === 'pro'}<HugeiconsIcon icon={Loading01Icon} size={16} class="animate-spin" />{/if}
+                  <span>Upgrade to Pro</span>
+                </button>
               </div>
             {/if}
           </div>
@@ -544,9 +505,17 @@
                     <p class="text-sm text-muted-foreground mt-0.5">Turn off auto-renewal. You keep access until {periodEnd() ? formatDate(periodEnd()!) : 'the end of the billing period'}.</p>
                   {/if}
                 </div>
-                <button onclick={handleCancelClick} class="btn-base btn-destructive shrink-0">
-                  <span>{!isLifetime() && subStatus() === 'cancel_at_period_end' ? 'Manage Cancellation' : 'Cancel Plan'}</span>
-                </button>
+                <div class="flex flex-col sm:flex-row gap-2 shrink-0">
+                  {#if (monthlyProActive() || isWeekly()) && !isLifetime()}
+                    <button onclick={() => startCheckout('plus')} disabled={checkoutBusy !== null} class="btn-base btn-secondary">
+                      {#if checkoutBusy === 'plus'}<HugeiconsIcon icon={Loading01Icon} size={16} class="animate-spin" />{/if}
+                      <span>Switch to Plus</span>
+                    </button>
+                  {/if}
+                  <button onclick={handleCancelClick} class="btn-base btn-destructive">
+                    <span>{!isLifetime() && subStatus() === 'cancel_at_period_end' ? 'Manage Cancellation' : 'Cancel Plan'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           {:else}
@@ -717,16 +686,11 @@
                 </p>
               </div>
               <button
-                onclick={() => downloadInvoice(inv)}
-                disabled={downloadingId !== null}
-                title="Download invoice PDF"
-                class="shrink-0 inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground border border-border/60 hover:border-border rounded-lg px-3 py-2 transition-colors disabled:opacity-50"
+                onclick={() => openInvoice(inv)}
+                title="View / print invoice"
+                class="shrink-0 inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground hover:text-foreground border border-border/60 hover:border-border rounded-lg px-3 py-2 transition-colors"
               >
-                {#if downloadingId === inv.id}
-                  <HugeiconsIcon icon={Loading01Icon} size={16} class="animate-spin" />
-                {:else}
-                  <HugeiconsIcon icon={Download01Icon} size={15} />
-                {/if}
+                <HugeiconsIcon icon={Download01Icon} size={15} />
                 <span>Invoice</span>
               </button>
             </div>
@@ -798,7 +762,6 @@
       <div class="space-y-3 text-sm text-muted-foreground leading-relaxed max-w-2xl">
         <p>Plus costs ₹199/month and Pro costs ₹349/month. Both renew automatically every month, and you can cancel anytime — you'll keep access until {isLifetime() ? 'you cancel' : periodEnd() ? formatDate(periodEnd()!) : 'the end of the current period'}.</p>
         <p>Need Pro for just a few days? The Weekly Pass gives full Pro access for 7 days at ₹79/week.</p>
-        <p>Gift codes grant free access with no expiry date.</p>
       </div>
     </div>
   {/if}
@@ -864,7 +827,6 @@
       <button class="btn-base btn-secondary" onclick={() => { showTransferModal = false; transferError = ''; successorUsername = ''; }}>Cancel</button>
       <button class="btn-base btn-destructive" onclick={confirmTransfer} disabled={isTransferring || !successorUsername.trim()}>
         {#if isTransferring}<HugeiconsIcon icon={Loading01Icon} size={16} class="animate-spin" />{/if}
-        <HugeiconsIcon icon={UserIcon} size={16} />
         Transfer & Cancel
       </button>
     </div>

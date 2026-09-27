@@ -130,27 +130,14 @@ Rows without a Razorpay match (mock payments) carry `downloadUrl: null`.
 }
 ```
 
-### `GET /api/v2/billing/invoices/[id]/pdf`
+### Invoice PDFs
 
-Direct PDF download of an invoice, generated server-side in Materio branding
-(no Razorpay page involved). Accepts a local payment row id or a Razorpay
-`inv_*` id (ownership verified). Returns `application/pdf` as an attachment.
-
-```text
-GET /api/v2/billing/invoices/inv_.../pdf
-Authorization: Bearer <token>
-```
-
-### Invoice brand assets
-
-The PDF uses OpenRunde (Regular/Bold), Quadrant (accent line), and the
-sticker logo — embedded as base64 in
-`apps/accounts/src/lib/server/assets/invoice-assets.ts` (generated, ~200KB).
-To regenerate (e.g. new logo): convert brand WOFF/WOFF2 fonts to subset TTF
-with rupees kept — `fontTools` cu2qu CFF→glyf recipe + subset
-`U+0020-007E,U+00A0-00FF,U+2010-201F,U+20B9`, force `flavor=None` on save
-(jsPDF/pdf-lib/fontkit cannot read WOFF wrappers or CFF the same way, and
-`bud.svg` can't be rasterized server-side so it stays out).
+Receipts open as a Materio-branded print view (`/invoices/[id]/print` —
+OpenRunde, Quadrant accent, sticker logo, real ₹) with a Print / Save PDF
+button. Browser print-to-PDF is used deliberately: font parsing needs
+codegen, which Cloudflare Workers blocks, so server-side PDF generation
+cannot work there. The view reads rows from `GET /api/v2/billing/invoices`,
+so it works from cached state.
 
 ---
 

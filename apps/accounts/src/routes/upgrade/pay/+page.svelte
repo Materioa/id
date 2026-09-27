@@ -4,8 +4,7 @@
     CreditCardIcon,
     Loading01Icon,
     CheckmarkCircle01Icon,
-    ArrowLeft01Icon,
-    LockIcon
+    ArrowLeft01Icon
   } from '@hugeicons/core-free-icons';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
@@ -273,11 +272,6 @@
     <!-- Top bar -->
     <div class="flex items-center justify-between mb-8 sm:mb-10">
       <img src="/logo-wordmark.webp" alt="Materio" class="h-7 sm:h-8 w-auto object-contain" />
-      {#if !loading && !testMode}
-        <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1.5">
-          <HugeiconsIcon icon={LockIcon} size={13} /> Secured
-        </span>
-      {/if}
     </div>
 
     {#if loading}
@@ -348,8 +342,7 @@
                     class="w-full px-4 py-3.5 rounded-2xl border border-border/60 bg-muted/40 text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-ring transition-all" />
                   <div class="relative">
                     <input id="cc-cvc" type="password" inputmode="numeric" bind:value={cvc} placeholder="Security code" maxlength="4" autocomplete="cc-csc" aria-label="Security code"
-                      class="w-full pl-4 pr-10 py-3.5 rounded-2xl border border-border/60 bg-muted/40 text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-ring transition-all" />
-                    <HugeiconsIcon icon={LockIcon} size={14} class="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      class="w-full px-4 py-3.5 rounded-2xl border border-border/60 bg-muted/40 text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-ring transition-all" />
                   </div>
                 </div>
                 <div class="space-y-2">
@@ -380,10 +373,7 @@
             {/if}
           {:else}
             <div class="rounded-2xl border border-border/60 px-5 py-5 space-y-3">
-              <div class="flex items-center gap-3">
-                <HugeiconsIcon icon={LockIcon} size={18} class="text-primary shrink-0" />
-                <p class="text-sm leading-relaxed">UPI first, then cards, netbanking & wallets — in Materio orange, with your details already filled in.</p>
-              </div>
+              <p class="text-sm leading-relaxed">UPI first, then cards, netbanking & wallets — in Materio orange, with your details already filled in.</p>
               <p class="text-xs text-muted-foreground leading-relaxed">Autopay is set up automatically so renewals just work. No charge happens here.</p>
             </div>
             {#if payError}
@@ -446,7 +436,6 @@
                 <HugeiconsIcon icon={Loading01Icon} size={16} class="animate-spin" />
                 <span>Opening secure page…</span>
               {:else}
-                <HugeiconsIcon icon={LockIcon} size={15} />
                 <span>Continue · ₹{plan().price}{priceSuffix()}</span>
               {/if}
             </button>
@@ -458,7 +447,7 @@
       </div>
 
       <p class="text-center text-xs text-muted-foreground mt-10">
-        Encrypted checkout · This is a secure Materio ID payment page
+        This is a secure Materio ID payment page
       </p>
     {/if}
   </div>
