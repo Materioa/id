@@ -20,6 +20,7 @@
     fileUpload?: any; requiresAuth?: boolean; legacy?: string | null;
     interview: { openingQuestion: string; systemPrompt: string; skipAllowed: boolean; asyncSubmit: boolean; completeMessage: string };
     triggers: { examTypes: string[]; autoShow: boolean };
+    magicJs?: string; magicEnabled?: boolean; trackingId?: string; trackViews?: boolean;
     updatedAt?: string;
   };
   type Response = { id: string; formId: string; kind?: string; sessionId?: string; userId?: string; username?: string; userEmail?: string; values?: Record<string, string>; skipped?: string[]; status?: string; reviewed?: boolean; examContext?: any; updatedAt?: string };
@@ -169,7 +170,8 @@
       requiresAuth: false,
       legacy: null,
       interview: { openingQuestion: '', systemPrompt: '', skipAllowed: true, asyncSubmit: true, completeMessage: 'Thanks — your response has been recorded.' },
-      triggers: { examTypes: [], autoShow: false }
+      triggers: { examTypes: [], autoShow: false },
+      magicJs: '', magicEnabled: false, trackingId: '', trackViews: true
     };
   }
 
@@ -199,7 +201,11 @@
   }
   function editDoc(d: Doc) {
     try {
-      editing = plain({ steps: [], confirmations: [], submitButton: { text: 'Submit', icon: '' }, fileUpload: { enabled: false }, requiresAuth: false, legacy: null, interview: { openingQuestion: '', systemPrompt: '', skipAllowed: true, asyncSubmit: true, completeMessage: '' }, triggers: { examTypes: [], autoShow: false }, ...plain(d) });
+      editing = plain({ steps: [], confirmations: [], submitButton: { text: 'Submit', icon: '' }, fileUpload: { enabled: false }, requiresAuth: false, legacy: null, interview: { openingQuestion: '', systemPrompt: '', skipAllowed: true, asyncSubmit: true, completeMessage: '' }, triggers: { examTypes: [], autoShow: false }, magicJs: '', magicEnabled: false, trackingId: '', trackViews: true, ...plain(d) });
+      // Backfill for docs saved before Magic & Beacons existed
+      if (typeof editing.magicJs !== 'string') editing.magicJs = '';
+      if (typeof editing.trackingId !== 'string') editing.trackingId = '';
+      if (editing.trackViews === undefined) editing.trackViews = true;
       editingRule = editing.kind === 'popup' ? plain(autoRule(editing.id) || defaultRule(editing.id)) : null;
       isNew = false; pickStep = 'edit'; editorTab = 'basics'; showEditor = true;
     } catch { /* toasted in plain() */ }
@@ -337,8 +343,8 @@
   }
 
   function editorTabs(kind: string): [string, string][] {
-    if (kind === 'popup') return [['basics', 'Basics'], ['questions', 'Questions'], ['pages', 'Welcome pages'], ['auto', 'Auto-show'], ['preview', 'Preview']];
-    return [['basics', 'Basics'], ['questions', 'Questions'], ['conversation', 'Conversation'], ['preview', 'Preview']];
+    if (kind === 'popup') return [['basics', 'Basics'], ['questions', 'Questions'], ['pages', 'Welcome pages'], ['auto', 'Auto-show'], ['magic', 'Magic & Beacons'], ['preview', 'Preview']];
+    return [['basics', 'Basics'], ['questions', 'Questions'], ['conversation', 'Conversation'], ['magic', 'Magic & Beacons'], ['preview', 'Preview']];
   }
 
   function defaultRule(formId: string): Rule {
@@ -436,6 +442,10 @@
               <h3 class="font-semibold leading-snug">{d.title}</h3>
               <p class="text-xs text-muted-foreground line-clamp-2">{d.description || 'No description yet'}</p>
               <p class="text-[11px] text-muted-foreground">{d.fields.length} questions · {answerCount(d.id)} answers{#if d.updatedAt} · {timeAgo(d.updatedAt)}{/if}</p>
+              <p class="text-[11px] flex gap-1.5 flex-wrap">
+                {#if d.magicEnabled && d.magicJs}<span class="badge" title="Has Magic JS">magic</span>{/if}
+                {#if d.trackingId}<span class="badge" title="Beacon: {d.trackingId}">beacon</span>{/if}
+              </p>
               {#if d.kind === 'popup'}<p class="text-[11px] {autoRule(d.id)?.enabled ? 'text-emerald-700' : 'text-muted-foreground'}">{autoRule(d.id)?.enabled ? 'Pops up on its own' : 'Opens from buttons only'}</p>{/if}
             </div>
             <div class="flex items-center gap-1 px-4 py-3 border-t border-border/50">
@@ -583,6 +593,20 @@
           </div>
         </div>
       {/if}
+    {:else if editorTab === 'magic'}
+      <div class="rounded-xl border border-border/60 bg-muted/20 p-4 mb-4 text-sm flex items-center gap-3">
+        <input type="checkbox" bind:checked={editing.magicEnabled} class="size-4" />
+        <div><b>Magic actions</b><p class="text-xs text-muted-foreground m-0">{editing.kind === 'popup' ? 'Little extras when the pop-up opens.' : 'Little extras when the interview starts.'} Confetti, a note, that sort of thing.</p></div>
+      </div>
+      <label class="fld">Custom code <span class="hint">Runs when this opens. You get the open popup, its details, a way to close it, and a way to record actions.</span>
+        <textarea rows="9" bind:value={editing.magicJs} spellcheck={false} placeholder="// Runs when this {editing.kind === 'popup' ? 'pop-up opens' : 'interview starts'}.&#10;// Example: add a small note at the top.&#10;// const bar = document.createElement('div');&#10;// bar.textContent = 'Almost done — 2 quick questions!';&#10;// ctx.root.querySelector('.promo-content')?.prepend(bar);" style="font-family: monospace; font-size: 12px;"></textarea>
+      </label>
+      <p class="text-[11px] text-muted-foreground mt-1">{(editing.magicJs || '').length}/20000 · Only admins can add code here. If something's wrong with it, this still works.</p>
+      <button class="text-xs underline mt-1" onclick={() => { try { new Function('ctx', editing.magicJs || ''); addToast('Looks good', 'success'); } catch (e) { addToast(`Something's off: ${e.message}`, 'error'); } }}>Check code</button>
+      <div class="grid sm:grid-cols-2 gap-4 mt-4">
+        <label class="fld">Beacon ID <span class="hint">Paste your ID and views get counted automatically</span><input bind:value={editing.trackingId} placeholder="e.g. G-ABC123XYZ or GTM-XXXXXX" style="font-family: monospace;" /></label>
+        <label class="fld check"><input type="checkbox" bind:checked={editing.trackViews} /> Count views for this {editing.kind === 'popup' ? 'pop-up' : 'interview'}</label>
+      </div>
     {:else if editorTab === 'preview'}
       {#if editing.kind === 'popup'}
         <div class="pv-overlay">

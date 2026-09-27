@@ -75,6 +75,11 @@
     buttonSecondaryLink?: string;
     buttonSecondaryIcon?: string;
     imageUrl?: string;
+    // Magic actions + view tracking
+    magicJs?: string;
+    magicEnabled?: boolean;
+    trackingId?: string;
+    trackViews?: boolean;
     isActive: boolean;
     createdAt?: string;
     lastUpdated?: string;
@@ -118,6 +123,10 @@
       linkText: string;
       linkUrl: string;
     };
+    magicJs: string;
+    magicEnabled: boolean;
+    trackingId: string;
+    trackViews: boolean;
     isActive: boolean;
   }
 
@@ -160,6 +169,10 @@
         linkText: "Read more",
         linkUrl: "",
       },
+      magicJs: "",
+      magicEnabled: false,
+      trackingId: "",
+      trackViews: true,
       isActive: true,
     };
   }
@@ -176,7 +189,7 @@
   let isPromoModalOpen = $state(false);
   let editingPromoId = $state<string | null>(null);
   let formSection = $state<
-    "content" | "appearance" | "schedule" | "actions" | "disclaimer"
+    "content" | "appearance" | "schedule" | "actions" | "disclaimer" | "magic"
   >("content");
   let previewDevice = $state<"desktop" | "mobile">("desktop");
 
@@ -282,6 +295,10 @@
         linkText: disclaimerObj.linkText || "",
         linkUrl: disclaimerObj.linkUrl || "",
       },
+      magicJs: typeof promo.magicJs === "string" ? promo.magicJs : "",
+      magicEnabled: promo.magicEnabled ?? !!(typeof promo.magicJs === "string" && promo.magicJs.trim()),
+      trackingId: typeof promo.trackingId === "string" ? promo.trackingId : "",
+      trackViews: promo.trackViews ?? true,
       isActive: promo.isActive,
     };
     isPromoModalOpen = true;
@@ -328,6 +345,10 @@
       showDateInfo: newPromo.showDateInfo,
       buttons: newPromo.buttons,
       disclaimer: newPromo.disclaimer,
+      magicJs: newPromo.magicJs,
+      magicEnabled: newPromo.magicEnabled,
+      trackingId: newPromo.trackingId.trim(),
+      trackViews: newPromo.trackViews,
       isActive: newPromo.isActive,
       enabled: newPromo.isActive,
     };
@@ -604,6 +625,16 @@
             : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}"
         >
           Disclaimer
+        </button>
+        <button
+          type="button"
+          onclick={() => (formSection = "magic")}
+          class="px-3.5 py-1.5 rounded-lg transition-all whitespace-nowrap font-medium {formSection ===
+          'magic'
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}"
+        >
+          Magic & Beacons
         </button>
       </div>
 
@@ -1175,6 +1206,84 @@
             </div>
           {/if}
 
+          <!-- Section 6: Magic & Beacons -->
+          {#if formSection === "magic"}
+            <div class="space-y-5 animate-in fade-in duration-200">
+              <div class="rounded-xl border border-border/60 bg-muted/20 p-4 text-sm flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  bind:checked={newPromo.magicEnabled}
+                  class="size-4"
+                  id="promoMagicEnabled"
+                />
+                <div>
+                  <label for="promoMagicEnabled" class="font-medium">Magic actions</label>
+                  <p class="text-xs text-muted-foreground m-0">
+                    Little extras when this opens — confetti, a countdown, that sort of thing.
+                  </p>
+                </div>
+              </div>
+
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <label for="promoMagicJs" class="text-xs font-medium text-muted-foreground">
+                    Custom code
+                  </label>
+                  <span class="text-[11px] text-muted-foreground font-mono">{newPromo.magicJs.length}/20000</span>
+                </div>
+                <textarea
+                  id="promoMagicJs"
+                  bind:value={newPromo.magicJs}
+                  rows="9"
+                  spellcheck={false}
+                  class="w-full rounded-xl border border-border/70 bg-background px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-primary resize-y placeholder:text-muted-foreground/50"
+                  placeholder={"// Runs when this opens.\n// Example: add a small note at the top.\n// You get the open popup, its details, a way to close it,\n// and a way to record actions.\nconst t = document.createElement('div');\nt.textContent = 'Ends soon!';\nt.style.cssText = 'font-size:12px;color:#ff6b00';\nctx.root.querySelector('.promo-content')?.prepend(t);"}
+                ></textarea>
+                <p class="text-[11px] text-muted-foreground">
+                  Only admins can add code here. If something's wrong with it, the popup still works.
+                </p>
+                <button
+                  type="button"
+                  onclick={() => {
+                    try {
+                      new Function("ctx", newPromo.magicJs);
+                      addToast("Looks good.");
+                    } catch (e) {
+                      addToast(`Something's off: ${e.message}`, "error");
+                    }
+                  }}
+                  class="text-xs text-primary hover:underline font-medium cursor-pointer"
+                >
+                  Check code
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1">
+                <div class="space-y-1.5">
+                  <label for="promoTrackingId" class="text-xs font-medium text-muted-foreground">
+                    Beacon ID
+                  </label>
+                  <input
+                    id="promoTrackingId"
+                    type="text"
+                    bind:value={newPromo.trackingId}
+                    class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-2 text-sm font-mono focus:outline-none transition-colors"
+                    placeholder="e.g. G-ABC123XYZ or GTM-XXXXXX"
+                  />
+                  <p class="text-[11px] text-muted-foreground">
+                    Paste your ID and views get counted automatically.
+                  </p>
+                </div>
+                <div class="space-y-1.5 pt-5">
+                  <Checkbox bind:checked={newPromo.trackViews} label="Count views" />
+                  <p class="text-[11px] text-muted-foreground ml-8">
+                    Turn off to skip counting for this one.
+                  </p>
+                </div>
+              </div>
+            </div>
+          {/if}
+
           <!-- Bottom Action Buttons -->
           <div class="flex items-center gap-3 pt-6 border-t border-border/50">
             <button
@@ -1586,6 +1695,12 @@
                   >
                     {promo.category || "whats-new"}
                   </span>
+                  {#if promo.magicEnabled && promo.magicJs}
+                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-400" title="Has Magic JS">magic</span>
+                  {/if}
+                  {#if promo.trackingId}
+                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono" title="Beacon: {promo.trackingId}">beacon</span>
+                  {/if}
                   {#if !mediaUrl}
                     <span
                       class="px-2 py-0.5 rounded-full text-[10px] font-medium {promo.isActive

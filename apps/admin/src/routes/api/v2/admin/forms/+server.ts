@@ -40,6 +40,11 @@ function sanitiseForm(body: any) {
       examTypes: Array.isArray(body?.triggers?.examTypes) ? body.triggers.examTypes : [],
       autoShow: body?.triggers?.autoShow === true
     },
+    // Magic actions (admin-authored JS run on open/submit) + per-modal view tracking
+    magicJs: typeof body.magicJs === 'string' ? body.magicJs.slice(0, 20000) : (typeof body.magic?.js === 'string' ? body.magic.js.slice(0, 20000) : ''),
+    magicEnabled: body.magicEnabled ?? body.magic?.enabled ?? (typeof (body.magicJs ?? body.magic?.js) === 'string' && String(body.magicJs ?? body.magic?.js).trim() ? true : false),
+    trackingId: typeof body.trackingId === 'string' ? body.trackingId.trim().slice(0, 40) : (typeof body.gaId === 'string' ? body.gaId.trim().slice(0, 40) : (typeof body.gtmId === 'string' ? body.gtmId.trim().slice(0, 40) : (typeof body.tracking?.id === 'string' ? body.tracking.id.trim().slice(0, 40) : ''))),
+    trackViews: body.trackViews ?? body.tracking?.trackViews ?? true,
     updatedAt: new Date().toISOString()
   };
 }

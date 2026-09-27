@@ -61,6 +61,11 @@ export async function GET({ request, url }) {
         startDate: p.startDate || '',
         endDate: p.endDate || '',
         showDateInfo: !!p.showDateInfo,
+        // Magic actions (admin-authored JS run when the modal opens) + view tracking
+        magicJs: typeof p.magicJs === 'string' ? p.magicJs : '',
+        magicEnabled: p.magicEnabled ?? (typeof p.magicJs === 'string' && p.magicJs.trim() ? true : false),
+        trackingId: typeof p.trackingId === 'string' ? p.trackingId : (typeof p.gaId === 'string' ? p.gaId : (typeof p.gtmId === 'string' ? p.gtmId : '')),
+        trackViews: p.trackViews ?? (typeof p.trackingId === 'string' && p.trackingId.trim() ? true : typeof p.gaId === 'string' && p.gaId.trim() ? true : typeof p.gtmId === 'string' && p.gtmId.trim() ? true : true),
         lastUpdated: p.lastUpdated || (p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString()),
         buttons: {
           primary: {
@@ -174,6 +179,11 @@ export async function POST({ request }) {
         linkText: body.disclaimer?.linkText || '',
         linkUrl: body.disclaimer?.linkUrl || ''
       },
+      // Magic actions + view tracking (admin-authored, trusted)
+      magicJs: typeof body.magicJs === 'string' ? body.magicJs.slice(0, 20000) : '',
+      magicEnabled: body.magicEnabled ?? (typeof body.magicJs === 'string' && body.magicJs.trim() ? true : false),
+      trackingId: typeof body.trackingId === 'string' ? body.trackingId.trim().slice(0, 40) : (typeof body.gaId === 'string' ? body.gaId.trim().slice(0, 40) : (typeof body.gtmId === 'string' ? body.gtmId.trim().slice(0, 40) : '')),
+      trackViews: body.trackViews ?? true,
       enabled: isActivating,
       isActive: isActivating,
       // Fallback flat fields
@@ -257,6 +267,15 @@ export async function PUT({ request, params, url }) {
     if (body.description !== undefined) {
       updateData.body = body.description;
     }
+
+    // Magic actions + tracking: cap lengths, accept legacy gaId/gtmId aliases
+    if (typeof body.magicJs === 'string') updateData.magicJs = body.magicJs.slice(0, 20000);
+    if (body.magicEnabled !== undefined) updateData.magicEnabled = !!body.magicEnabled;
+    if (body.trackingId !== undefined || body.gaId !== undefined || body.gtmId !== undefined) {
+      const raw = body.trackingId ?? body.gaId ?? body.gtmId ?? '';
+      updateData.trackingId = String(raw).trim().slice(0, 40);
+    }
+    if (body.trackViews !== undefined) updateData.trackViews = !!body.trackViews;
 
     updateData.lastUpdated = new Date().toISOString();
 
