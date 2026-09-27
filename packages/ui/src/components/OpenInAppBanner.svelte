@@ -71,7 +71,8 @@
     }
   }
 
-  // Manual tap: missing app falls back to the downloads page.
+  // Silent auto-open falls back to this same page, so a missing app
+  // just sees the nudge below.
   function intentUrl(fallback?: string): string {
     const fb = encodeURIComponent(fallback || window.location.href);
     return `intent://${host()}${currentPath()}#Intent;scheme=https;package=${packageId};S.browser_fallback_url=${fb};end`;
@@ -82,24 +83,26 @@
   }
 
   function openInApp() {
+    // If the card is already in the failed state the button is a plain
+    // download link (see template) — this path is the first tap only.
+    if (openFailed) return;
     try {
-      if (isAndroid) {
-        window.location.href = intentUrl(downloadsUrl);
-      } else {
-        openFailed = false;
-        let left = false;
-        const onHide = () => {
-          left = true;
-        };
-        window.addEventListener('pagehide', onHide, { once: true });
-        window.addEventListener('blur', onHide, { once: true });
-        window.location.href = schemeUrl();
-        setTimeout(() => {
-          window.removeEventListener('pagehide', onHide);
-          window.removeEventListener('blur', onHide);
-          if (!left) openFailed = true;
-        }, 1400);
-      }
+      openFailed = false;
+      let left = false;
+      const onHide = () => {
+        left = true;
+      };
+      window.addEventListener('pagehide', onHide, { once: true });
+      window.addEventListener('blur', onHide, { once: true });
+      // Android: intent: URL opens the app without any Play Console
+      // setup; a missing app falls back to this page (see timer).
+      // Desktop: tries the registered materio:// protocol.
+      window.location.href = isAndroid ? intentUrl(window.location.href) : schemeUrl();
+      setTimeout(() => {
+        window.removeEventListener('pagehide', onHide);
+        window.removeEventListener('blur', onHide);
+        if (!left) openFailed = true;
+      }, isAndroid ? 2200 : 1400);
     } catch {}
   }
 
@@ -141,10 +144,10 @@
     {#if openFailed}
       <div class="mia-text">
         <strong>Couldn't open the app</strong>
-        <span>It may not be installed yet — want to download it?</span>
+        <span>It may not be installed yet — download it to continue.</span>
       </div>
       <div class="mia-actions">
-        <a class="mia-primary" href={downloadsUrl} target="_blank" rel="noopener noreferrer">Download the app</a>
+        <a class="mia-primary" href={downloadsUrl} target="_blank" rel="noopener noreferrer">Download</a>
         <button type="button" class="mia-dismiss" onclick={dismiss} aria-label="Dismiss">✕</button>
       </div>
     {:else}
@@ -154,7 +157,6 @@
       </div>
       <div class="mia-actions">
         <button type="button" class="mia-primary" onclick={openInApp}>Open in app</button>
-        <a class="mia-link" href={downloadsUrl} target="_blank" rel="noopener noreferrer">Get the app</a>
         <button type="button" class="mia-dismiss" onclick={dismiss} aria-label="Dismiss">✕</button>
       </div>
     {/if}
@@ -209,13 +211,6 @@
     cursor: pointer;
     text-decoration: none;
     display: inline-block;
-  }
-  .mia-link {
-    font-size: 12px;
-    text-decoration: underline;
-    white-space: nowrap;
-    color: inherit;
-    opacity: 0.85;
   }
   .mia-dismiss {
     background: none;
