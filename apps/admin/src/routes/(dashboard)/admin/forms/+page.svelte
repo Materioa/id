@@ -1,8 +1,9 @@
 <svelte:head><title>Forms & Wizards</title></svelte:head>
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { makeAdminRequest } from '$lib/api/admin';
+  import { runPreviewMagic } from '$lib/utils/magicPreview';
   import { addToast } from '$lib/stores/toast';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { Folder01Icon, Add01Icon, Delete01Icon, Edit01Icon, SaveIcon, RefreshIcon, ViewIcon, CheckmarkCircle01Icon, Comment01Icon, Mail01Icon, Tick01Icon } from '@hugeicons/core-free-icons';
@@ -59,6 +60,40 @@
   let detailOpen = $state(false);
   let previewDoc = $state<Doc | null>(null);
   let previewOpen = $state(false);
+
+  // Live Magic preview (magic tab): re-runs the author's code against the
+  // mock below as they type, so effects show here before anything is saved.
+  let magicRootEl: HTMLElement | null = $state(null);
+  let magicOverlayEl: HTMLElement | null = $state(null);
+  let magicCleanup: (() => void) | null = null;
+  let magicError = $state('');
+  $effect(() => {
+    const tab = editorTab;
+    const doc = editing;
+    const code = doc?.magicJs || '';
+    const enabled = doc?.magicEnabled ?? false;
+    if (tab !== 'magic' || !doc || !enabled || !code.trim()) { magicError = ''; return; }
+    const timer = setTimeout(() => {
+      tick().then(() => {
+        try { if (typeof magicCleanup === 'function') magicCleanup(); } catch {}
+        magicCleanup = null;
+        const overlay = magicOverlayEl;
+        const root = magicRootEl;
+        if (!overlay || !root) return;
+        const { cleanup, error } = runPreviewMagic(code, {
+          root, overlay, data: doc, id: doc.id || 'preview',
+          title: doc.title || 'Preview', kind: doc.kind, stage: 'open', formData: {}
+        });
+        magicCleanup = cleanup;
+        magicError = error || '';
+      });
+    }, 500);
+    return () => {
+      clearTimeout(timer);
+      try { if (typeof magicCleanup === 'function') magicCleanup(); } catch {}
+      magicCleanup = null;
+    };
+  });
 
   const contexts = ['general', 'viva', 'practical', 'recruiting', 'curation'];
   const fieldTypes = ['text', 'textarea', 'email', 'select', 'rating', 'file'];
@@ -598,14 +633,39 @@
         <input type="checkbox" bind:checked={editing.magicEnabled} class="size-4" />
         <div><b>Magic actions</b><p class="text-xs text-muted-foreground m-0">{editing.kind === 'popup' ? 'Little extras when the pop-up opens.' : 'Little extras when the interview starts.'} Confetti, a note, that sort of thing.</p></div>
       </div>
-      <label class="fld">Custom code <span class="hint">Runs when this opens. You get the open popup, its details, a way to close it, and a way to record actions.</span>
-        <textarea rows="9" bind:value={editing.magicJs} spellcheck={false} placeholder="// Runs when this {editing.kind === 'popup' ? 'pop-up opens' : 'interview starts'}.&#10;// Example: add a small note at the top.&#10;// const bar = document.createElement('div');&#10;// bar.textContent = 'Almost done — 2 quick questions!';&#10;// ctx.root.querySelector('.promo-content')?.prepend(bar);" style="font-family: monospace; font-size: 12px;"></textarea>
+      <label class="fld">Custom code <span class="hint">Runs when this opens. ctx.root is the popup itself, ctx.overlay is the area around it (good for confetti).</span>
+        <textarea rows="9" bind:value={editing.magicJs} spellcheck={false} placeholder="// Runs when this {editing.kind === 'popup' ? 'pop-up opens' : 'interview starts'}.&#10;// Example: add a small note at the top.&#10;// const bar = document.createElement('div');&#10;// bar.textContent = 'Almost done — 2 quick questions!';&#10;// ctx.root.querySelector('.promo-content')?.prepend(bar);&#10;// Example: confetti around the popup.&#10;// const pop = document.createElement('div');&#10;// pop.textContent = 'Well done!';&#10;// ctx.overlay.appendChild(pop);" style="font-family: monospace; font-size: 12px;"></textarea>
       </label>
       <p class="text-[11px] text-muted-foreground mt-1">{(editing.magicJs || '').length}/20000 · Only admins can add code here. If something's wrong with it, this still works.</p>
       <button class="text-xs underline mt-1" onclick={() => { try { new Function('ctx', editing.magicJs || ''); addToast('Looks good', 'success'); } catch (e) { addToast(`Something's off: ${e.message}`, 'error'); } }}>Check code</button>
       <div class="grid sm:grid-cols-2 gap-4 mt-4">
         <label class="fld">Beacon ID <span class="hint">Paste your ID and views get counted automatically</span><input bind:value={editing.trackingId} placeholder="e.g. G-ABC123XYZ or GTM-XXXXXX" style="font-family: monospace;" /></label>
         <label class="fld check"><input type="checkbox" bind:checked={editing.trackViews} /> Count views for this {editing.kind === 'popup' ? 'pop-up' : 'interview'}</label>
+      </div>
+      <div class="mt-4">
+        <p class="text-xs mb-2"><b>Live preview</b> <span class="text-muted-foreground">— shows what your code does. Nothing is saved.</span></p>
+        {#if editing.kind === 'popup'}
+          <div class="pv-overlay" bind:this={magicOverlayEl}>
+            <div class="pv-modal" bind:this={magicRootEl}>
+              <div class="promo-content">
+                <div class="pv-mark">{(editing.title || 'M').slice(0, 1)}</div>
+                <h3>{editing.title || 'Untitled'}</h3>
+                <p>{editing.description || 'No description yet'}</p>
+                <div class="pv-btn">{editing.submitButton.text || 'Submit'}</div>
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div bind:this={magicOverlayEl}>
+            <div class="pv-chat" bind:this={magicRootEl}>
+              <div class="promo-content" style="display: contents;">
+                <div class="pv-msg"><span>M</span><p>{editing.interview.openingQuestion || editing.description || '...'}</p></div>
+                <div class="pv-msg user"><p>Visitors answer in their own words…</p><span>You</span></div>
+              </div>
+            </div>
+          </div>
+        {/if}
+        {#if magicError}<p class="text-xs text-destructive mt-2">Preview note: {magicError}</p>{/if}
       </div>
     {:else if editorTab === 'preview'}
       {#if editing.kind === 'popup'}

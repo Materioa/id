@@ -16,8 +16,9 @@
     ViewIcon,
     Upload01Icon,
   } from "@hugeicons/core-free-icons";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { addToast } from "$lib/stores/toast";
+  import { runPreviewMagic } from "$lib/utils/magicPreview";
   import Modal from "$lib/components/Modal.svelte";
   import Checkbox from "$lib/components/Checkbox.svelte";
   import Dropdown from "$lib/components/Dropdown.svelte";
@@ -192,6 +193,42 @@
     "content" | "appearance" | "schedule" | "actions" | "disclaimer" | "magic"
   >("content");
   let previewDevice = $state<"desktop" | "mobile">("desktop");
+
+  // Live Magic preview: re-runs the author's code against the preview card
+  // as they type, so effects show here before anything is saved.
+  let promoMagicRootEl: HTMLElement | null = $state(null);
+  let promoMagicOverlayEl: HTMLElement | null = $state(null);
+  let promoMagicCleanup: (() => void) | null = null;
+  let promoMagicError = $state("");
+  $effect(() => {
+    const open = isPromoModalOpen;
+    const code = newPromo.magicJs || "";
+    const enabled = newPromo.magicEnabled;
+    const device = previewDevice;
+    if (!open || !enabled || !code.trim()) { promoMagicError = ""; return; }
+    const timer = setTimeout(() => {
+      tick().then(() => {
+        try { if (typeof promoMagicCleanup === "function") promoMagicCleanup(); } catch {}
+        promoMagicCleanup = null;
+        const overlay = promoMagicOverlayEl;
+        const root = promoMagicRootEl;
+        if (!overlay || !root) return;
+        const { cleanup, error } = runPreviewMagic(code, {
+          root, overlay, data: { ...newPromo },
+          id: editingPromoId || "preview",
+          title: newPromo.title || "Preview",
+          kind: "promotion", stage: "open", formData: {},
+        });
+        promoMagicCleanup = cleanup;
+        promoMagicError = error || "";
+      });
+    }, 500);
+    return () => {
+      clearTimeout(timer);
+      try { if (typeof promoMagicCleanup === "function") promoMagicCleanup(); } catch {}
+      promoMagicCleanup = null;
+    };
+  });
 
   // Confirm Modal state
   let isConfirmOpen = $state(false);
@@ -1237,7 +1274,7 @@
                   rows="9"
                   spellcheck={false}
                   class="w-full rounded-xl border border-border/70 bg-background px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-primary resize-y placeholder:text-muted-foreground/50"
-                  placeholder={"// Runs when this opens.\n// Example: add a small note at the top.\n// You get the open popup, its details, a way to close it,\n// and a way to record actions.\nconst t = document.createElement('div');\nt.textContent = 'Ends soon!';\nt.style.cssText = 'font-size:12px;color:#ff6b00';\nctx.root.querySelector('.promo-content')?.prepend(t);"}
+                  placeholder={"// Runs when this opens.\n// ctx.root is the popup itself,\n// ctx.overlay is the area around it (good for confetti).\nconst t = document.createElement('div');\nt.textContent = 'Ends soon!';\nt.style.cssText = 'font-size:12px;color:#ff6b00';\nctx.root.querySelector('.promo-content')?.prepend(t);\n// Confetti around the popup:\n// const pop = document.createElement('div');\n// pop.textContent = 'Well done!';\n// ctx.overlay.appendChild(pop);"}
                 ></textarea>
                 <p class="text-[11px] text-muted-foreground">
                   Only admins can add code here. If something's wrong with it, the popup still works.
@@ -1319,6 +1356,7 @@
             class="flex items-center justify-between text-xs text-muted-foreground px-1"
           >
             <span class="font-medium text-foreground text-xs">Preview</span>
+            {#if promoMagicError}<span class="text-[11px] text-destructive">Preview note: {promoMagicError}</span>{/if}
             <div class="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg">
               <button
                 type="button"
@@ -1347,6 +1385,7 @@
           {#if previewDevice === "desktop"}
             <!-- Desktop Canvas: Adapts to Horizontal vs Vertical Orientation -->
             <div
+              bind:this={promoMagicOverlayEl}
               class="bg-neutral-900/10 dark:bg-neutral-950/60 border border-border/60 rounded-xl p-5 flex items-center justify-center min-h-[380px] overflow-hidden relative"
             >
               <div
@@ -1355,6 +1394,7 @@
 
               <!-- Desktop Promo Card -->
               <div
+                bind:this={promoMagicRootEl}
                 class="relative z-10 w-full bg-card border border-border/80 rounded-2xl shadow-xl overflow-hidden transition-all duration-300 {newPromo.orientation ===
                   'horizontal' && previewMediaUrl
                   ? 'max-w-[480px] flex flex-row'
@@ -1387,10 +1427,10 @@
 
                 <!-- Content Area -->
                 <div
-                  class={newPromo.orientation === "horizontal" &&
+                  class="promo-content {newPromo.orientation === "horizontal" &&
                   previewMediaUrl
                     ? "w-7/12 p-4 flex flex-col justify-between"
-                    : "p-4 space-y-3"}
+                    : "p-4 space-y-3"}"
                 >
                   <div class="space-y-2">
                     <div class="flex items-center justify-between gap-2">
@@ -1479,6 +1519,7 @@
           {:else}
             <!-- Mobile Preview: Pure Bottom Sheet (Minimal & Clean, No Phone Bezel) -->
             <div
+              bind:this={promoMagicOverlayEl}
               class="bg-neutral-900/10 dark:bg-neutral-950/60 border border-border/60 rounded-xl p-4 flex flex-col justify-end min-h-[380px] overflow-hidden relative"
             >
               <!-- Darkened backdrop overlay -->
@@ -1488,6 +1529,7 @@
 
               <!-- Bottom Sheet -->
               <div
+                bind:this={promoMagicRootEl}
                 class="relative z-10 w-full max-w-[340px] mx-auto bg-card border-t border-x border-border/80 rounded-t-2xl rounded-b-none shadow-xl flex flex-col max-h-[350px] animate-in slide-in-from-bottom-3 duration-200"
               >
                 <!-- Drag Handle -->
@@ -1518,7 +1560,7 @@
                   </div>
                 {/if}
 
-                <div class="p-3.5 space-y-2 overflow-y-auto">
+                <div class="promo-content p-3.5 space-y-2 overflow-y-auto">
                   <div class="flex items-center justify-between gap-1">
                     <span
                       class="text-[9px] font-semibold text-primary px-1.5 py-0.5 rounded-full bg-primary/10"
