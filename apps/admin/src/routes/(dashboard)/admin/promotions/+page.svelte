@@ -184,6 +184,65 @@
   let isLoading = $state(false);
   let activeTab = $state<"active" | "history">("active");
 
+  // Beacon view counts per promotion id (only for promos carrying a
+  // Beacon ID; absent = still loading or unavailable, never shown).
+  let promoViews = $state<Record<string, number>>({});
+
+  async function fetchPromoViews(promo: Promotion) {
+    if (!promo?.trackingId || !promo?.id) return;
+    try {
+      const res: any = await makeAdminRequest(
+        `promo-stats?modalId=${encodeURIComponent(promo.id)}&title=${encodeURIComponent(promo.title || "")}`,
+        "GET",
+      );
+      if (res && res.supported === true && typeof res.views === "number") {
+        promoViews = { ...promoViews, [promo.id]: res.views };
+      }
+    } catch {
+      // Silent: counts are a nicety, never an error surface.
+    }
+  }
+
+  function refreshPromoViews() {
+    for (const promo of promotions) {
+      if (promo.trackingId) fetchPromoViews(promo);
+    }
+  }
+
+  // Beacon activity tab inside the editor (per-Beacon detail).
+  let beaconTab = $state<"setup" | "activity">("setup");
+  let activityLoading = $state(false);
+  let activityStats = $state<any>(null);
+
+  async function loadBeaconActivity() {
+    const modalId = editingPromoId || "";
+    const title = newPromo.title || "";
+    if (!newPromo.trackingId || (!modalId && !title)) {
+      activityStats = null;
+      return;
+    }
+    activityLoading = true;
+    activityStats = null;
+    try {
+      const res: any = await makeAdminRequest(
+        `promo-stats?modalId=${encodeURIComponent(modalId)}&title=${encodeURIComponent(title)}`,
+        "GET",
+      );
+      activityStats = res || null;
+    } catch {
+      activityStats = { supported: false, reason: "error" };
+    } finally {
+      activityLoading = false;
+    }
+  }
+
+  function openBeaconTab(tab: "setup" | "activity") {
+    beaconTab = tab;
+    if (tab === "activity" && !activityStats && !activityLoading) {
+      loadBeaconActivity();
+    }
+  }
+
   // Form state
   let newPromo = $state<PromoForm>(defaultPromoForm());
   let isSubmitting = $state(false);
@@ -258,6 +317,7 @@
     try {
       const res: any = await makeAdminRequest("promotions?all=true", "GET");
       promotions = Array.isArray(res) ? res : res.promotions || [];
+      refreshPromoViews();
     } catch (e: any) {
       console.error(e);
       promotions = [];
@@ -274,6 +334,8 @@
     editingPromoId = null;
     newPromo = defaultPromoForm();
     formSection = "content";
+    beaconTab = "setup";
+    activityStats = null;
     isPromoModalOpen = true;
   }
 
@@ -338,6 +400,8 @@
       trackViews: promo.trackViews ?? true,
       isActive: promo.isActive,
     };
+    beaconTab = "setup";
+    activityStats = null;
     isPromoModalOpen = true;
   }
 
@@ -1274,7 +1338,7 @@
                   rows="9"
                   spellcheck={false}
                   class="w-full rounded-xl border border-border/70 bg-background px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-primary resize-y placeholder:text-muted-foreground/50"
-                  placeholder={"// Runs when this opens.\n// ctx.root is the popup itself,\n// ctx.overlay is the area around it (good for confetti).\n// Skip the apps: if (ctx.isApp) return;\nconst t = document.createElement('div');\nt.textContent = 'Ends soon!';\nt.style.cssText = 'font-size:12px;color:#ff6b00';\nctx.root.querySelector('.promo-content')?.prepend(t);\n// Confetti around the popup:\n// const pop = document.createElement('div');\n// pop.textContent = 'Well done!';\n// ctx.overlay.appendChild(pop);"}
+                  placeholder={"// Runs when this opens.\n// ctx.root is the popup itself,\n// ctx.overlay is the area around it (good for confetti).\n// Skip the apps: if (ctx.isApp) return false;\nconst t = document.createElement('div');\nt.textContent = 'Ends soon!';\nt.style.cssText = 'font-size:12px;color:#ff6b00';\nctx.root.querySelector('.promo-content')?.prepend(t);\n// Confetti around the popup:\n// const pop = document.createElement('div');\n// pop.textContent = 'Well done!';\n// ctx.overlay.appendChild(pop);"}
                 ></textarea>
                 <p class="text-[11px] text-muted-foreground">
                   Only admins can add code here. If something's wrong with it, the popup still works.
@@ -1295,6 +1359,30 @@
                 </button>
               </div>
 
+              <div class="pt-1">
+                <div class="flex items-center gap-4 border-b border-border/50">
+                  <button
+                    type="button"
+                    onclick={() => openBeaconTab("setup")}
+                    class="pb-2 text-xs font-medium transition-colors cursor-pointer {beaconTab === 'setup'
+                      ? 'text-foreground border-b-2 border-primary -mb-px'
+                      : 'text-muted-foreground hover:text-foreground'}"
+                  >
+                    Setup
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => openBeaconTab("activity")}
+                    class="pb-2 text-xs font-medium transition-colors cursor-pointer {beaconTab === 'activity'
+                      ? 'text-foreground border-b-2 border-primary -mb-px'
+                      : 'text-muted-foreground hover:text-foreground'}"
+                  >
+                    Activity
+                  </button>
+                </div>
+              </div>
+
+              {#if beaconTab === "setup"}
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1">
                 <div class="space-y-1.5">
                   <label for="promoTrackingId" class="text-xs font-medium text-muted-foreground">
@@ -1318,6 +1406,55 @@
                   </p>
                 </div>
               </div>
+              {:else}
+              <div class="pt-1">
+                {#if !newPromo.trackingId}
+                  <p class="text-xs text-muted-foreground m-0">
+                    Add a Beacon ID to see numbers here.
+                  </p>
+                {:else if activityLoading}
+                  <p class="text-xs text-muted-foreground m-0">
+                    Collecting numbers…
+                  </p>
+                {:else if !activityStats || activityStats.supported !== true}
+                  <p class="text-xs text-muted-foreground m-0">
+                    Numbers appear here once this Beacon ID starts receiving views — usually within a day.
+                  </p>
+                  <button
+                    type="button"
+                    onclick={loadBeaconActivity}
+                    class="mt-2 text-xs text-primary hover:underline font-medium cursor-pointer"
+                  >
+                    Refresh
+                  </button>
+                {:else}
+                  <div class="divide-y divide-border/40">
+                    <div class="flex items-center justify-between py-2">
+                      <span class="text-xs text-muted-foreground">Views</span>
+                      <span class="text-sm font-semibold">{activityStats.views?.toLocaleString?.() ?? activityStats.views ?? 0}</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2">
+                      <span class="text-xs text-muted-foreground">Button taps</span>
+                      <span class="text-sm font-semibold">{activityStats.taps?.toLocaleString?.() ?? activityStats.taps ?? 0}</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2">
+                      <span class="text-xs text-muted-foreground">Closed</span>
+                      <span class="text-sm font-semibold">{activityStats.closes?.toLocaleString?.() ?? activityStats.closes ?? 0}</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between pt-2">
+                    <span class="text-[11px] text-muted-foreground">Last {activityStats.rangeDays || 30} days</span>
+                    <button
+                      type="button"
+                      onclick={loadBeaconActivity}
+                      class="text-xs text-primary hover:underline font-medium cursor-pointer"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                {/if}
+              </div>
+              {/if}
             </div>
           {/if}
 
@@ -1814,13 +1951,24 @@
               <div
                 class="flex items-center justify-between pt-3 border-t border-border/40 text-xs"
               >
-                <span
-                  class="text-[11px] text-muted-foreground flex items-center gap-1"
-                >
-                  <HugeiconsIcon icon={Calendar01Icon} size={12} />
-                  {new Date(
-                    promo.createdAt || promo.lastUpdated || Date.now(),
-                  ).toLocaleDateString()}
+                <span class="flex items-center gap-3">
+                  <span
+                    class="text-[11px] text-muted-foreground flex items-center gap-1"
+                  >
+                    <HugeiconsIcon icon={Calendar01Icon} size={12} />
+                    {new Date(
+                      promo.createdAt || promo.lastUpdated || Date.now(),
+                    ).toLocaleDateString()}
+                  </span>
+                  {#if promo.trackingId && promoViews[promo.id] !== undefined}
+                    <span
+                      class="text-[11px] text-muted-foreground flex items-center gap-1"
+                      title="Views in the last 30 days"
+                    >
+                      <HugeiconsIcon icon={ViewIcon} size={12} />
+                      {promoViews[promo.id].toLocaleString()}
+                    </span>
+                  {/if}
                 </span>
 
                 <div class="flex items-center gap-1">
