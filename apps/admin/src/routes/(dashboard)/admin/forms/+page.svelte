@@ -633,7 +633,7 @@
         <input type="checkbox" bind:checked={editing.magicEnabled} class="size-4" />
         <div><b>Magic actions</b><p class="text-xs text-muted-foreground m-0">{editing.kind === 'popup' ? 'Little extras when the pop-up opens.' : 'Little extras when the interview starts.'} Confetti, a note, that sort of thing.</p></div>
       </div>
-      <label class="fld">Custom code <span class="hint">Runs when this opens. ctx.root is the popup itself, ctx.overlay is the area around it (good for confetti).</span>
+      <label class="fld">Custom code <span class="hint">Runs when this opens. ctx.root is the popup itself, ctx.overlay is the area around it (good for confetti). Skip the apps with <span style="font-family: monospace;">if (ctx.isApp) return;</span></span>
         <textarea rows="9" bind:value={editing.magicJs} spellcheck={false} placeholder="// Runs when this {editing.kind === 'popup' ? 'pop-up opens' : 'interview starts'}.&#10;// Example: add a small note at the top.&#10;// const bar = document.createElement('div');&#10;// bar.textContent = 'Almost done — 2 quick questions!';&#10;// ctx.root.querySelector('.promo-content')?.prepend(bar);&#10;// Example: confetti around the popup.&#10;// const pop = document.createElement('div');&#10;// pop.textContent = 'Well done!';&#10;// ctx.overlay.appendChild(pop);" style="font-family: monospace; font-size: 12px;"></textarea>
       </label>
       <p class="text-[11px] text-muted-foreground mt-1">{(editing.magicJs || '').length}/20000 · Only admins can add code here. If something's wrong with it, this still works.</p>

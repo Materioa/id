@@ -1274,7 +1274,7 @@
                   rows="9"
                   spellcheck={false}
                   class="w-full rounded-xl border border-border/70 bg-background px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-primary resize-y placeholder:text-muted-foreground/50"
-                  placeholder={"// Runs when this opens.\n// ctx.root is the popup itself,\n// ctx.overlay is the area around it (good for confetti).\nconst t = document.createElement('div');\nt.textContent = 'Ends soon!';\nt.style.cssText = 'font-size:12px;color:#ff6b00';\nctx.root.querySelector('.promo-content')?.prepend(t);\n// Confetti around the popup:\n// const pop = document.createElement('div');\n// pop.textContent = 'Well done!';\n// ctx.overlay.appendChild(pop);"}
+                  placeholder={"// Runs when this opens.\n// ctx.root is the popup itself,\n// ctx.overlay is the area around it (good for confetti).\n// Skip the apps: if (ctx.isApp) return;\nconst t = document.createElement('div');\nt.textContent = 'Ends soon!';\nt.style.cssText = 'font-size:12px;color:#ff6b00';\nctx.root.querySelector('.promo-content')?.prepend(t);\n// Confetti around the popup:\n// const pop = document.createElement('div');\n// pop.textContent = 'Well done!';\n// ctx.overlay.appendChild(pop);"}
                 ></textarea>
                 <p class="text-[11px] text-muted-foreground">
                   Only admins can add code here. If something's wrong with it, the popup still works.

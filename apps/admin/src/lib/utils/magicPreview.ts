@@ -16,9 +16,37 @@ export type PreviewMagicCtx = {
 	kind: string;
 	stage: string;
 	formData: Record<string, unknown>;
+	isApp: boolean;
+	platform: string;
 	close: () => void;
 	track: (name: string, params?: Record<string, unknown>) => boolean;
 };
+
+/** Same shell detection as the live site (admin always previews as web). */
+export function detectPreviewPlatform(): string {
+	try {
+		if (typeof window === 'undefined') return 'web';
+		if (
+			(window as any).__TAURI_INTERNALS__ ||
+			(window as any).__TAURI__ ||
+			window.location?.hostname === 'tauri.localhost' ||
+			window.location?.protocol === 'tauri:'
+		)
+			return 'windows';
+		const cap = (window as any).Capacitor;
+		if (
+			(cap?.isNativePlatform && cap.isNativePlatform()) ||
+			(cap?.getPlatform && cap.getPlatform() !== 'web') ||
+			(window as any).AndroidBridge ||
+			window.location?.protocol === 'capacitor:' ||
+			window.location?.hostname === 'capacitor.localhost'
+		)
+			return 'android';
+	} catch {
+		/* fall through to web */
+	}
+	return 'web';
+}
 
 export function runPreviewMagic(
 	code: string,
@@ -38,10 +66,15 @@ export function runPreviewMagic(
 		kind: 'promotion',
 		stage: 'open',
 		formData: {},
+		isApp: undefined as unknown as boolean,
+		platform: undefined as unknown as string,
 		close: () => {},
 		track: () => false,
 		...ctx
 	};
+	if (typeof fullCtx.platform !== 'string' || !fullCtx.platform)
+		fullCtx.platform = detectPreviewPlatform();
+	if (typeof fullCtx.isApp !== 'boolean') fullCtx.isApp = fullCtx.platform !== 'web';
 	// Same backfill as the live site, so previews behave the same.
 	try {
 		const root = fullCtx.root as Element | null;
