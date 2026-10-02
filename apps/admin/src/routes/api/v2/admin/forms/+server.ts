@@ -31,10 +31,17 @@ function sanitiseForm(body: any) {
     legacy: body.legacy ? String(body.legacy) : null,
     interview: {
       openingQuestion: String(body?.interview?.openingQuestion || body?.wizard?.intro || ''),
-      systemPrompt: String(body?.interview?.systemPrompt || ''),
+      // Copy for the welcome + about stages. Kept short and optional so an
+      // older saved doc still renders with sensible defaults.
+      introTitle: String(body?.interview?.introTitle || '').slice(0, 120),
+      introBody: String(body?.interview?.introBody || '').slice(0, 600),
+      privacyNote: String(body?.interview?.privacyNote || '').slice(0, 400),
+      tone: String(body?.interview?.tone || '').slice(0, 40),
+      showReview: body?.interview?.showReview !== false,
+      systemPrompt: String(body?.interview?.systemPrompt || '').slice(0, 4000),
       skipAllowed: body?.interview?.skipAllowed ?? body?.wizard?.skipAllowed ?? true,
       asyncSubmit: body?.interview?.asyncSubmit ?? true,
-      completeMessage: String(body?.interview?.completeMessage || 'Thanks — your response has been recorded.')
+      completeMessage: String(body?.interview?.completeMessage || 'Thanks — your response has been recorded.').slice(0, 400)
     },
     triggers: {
       examTypes: Array.isArray(body?.triggers?.examTypes) ? body.triggers.examTypes : [],

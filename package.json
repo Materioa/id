@@ -9,7 +9,10 @@
     "dev:auth": "bun --env-file=../../.env --cwd apps/auth dev -- --port 5174",
     "dev:admin": "bun --env-file=../../.env --cwd apps/admin dev -- --port 5175",
     "check": "bun run --filter './apps/*' check",
-    "build": "bun run --filter './apps/*' build"
+    "build": "bun run --filter './apps/*' build",
+    "test:interviewer": "bun run scripts/test-interviewer-extract.ts",
+    "test:overlay": "bun run scripts/test-overlay-stack.ts",
+    "test": "bun run test:interviewer && bun run test:overlay"
   },
   "packageManager": "bun@1.3.0"
 }

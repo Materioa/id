@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./styles.css": "./src/app.css",
+    "./overlay": "./src/overlay.ts",
     "./components/*": "./src/components/*"
   },
   "peerDependencies": {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { underlayZ, isOverlayOpen, subscribeOverlay } from '@materio/ui/overlay';
 
   // "Open in app" nudge for Materio web apps (auth / accounts / admin).
   // - Hidden inside the native Android / desktop shells.
@@ -25,6 +26,14 @@
   let visible = $state(false);
   let isAndroid = $state(false);
   let openFailed = $state(false);
+
+  // Track the dialog stack so the nudge gets out of the way when one opens.
+  let dialogOpen = $state(false);
+  $effect(() => {
+    const sync = () => (dialogOpen = isOverlayOpen());
+    sync();
+    return subscribeOverlay(sync);
+  });
 
   const DISMISS_KEY = 'materio_open_in_app_dismissed';
   const AUTO_KEY = 'materio_open_in_app_auto';
@@ -140,7 +149,15 @@
 </script>
 
 {#if visible}
-  <div class="mia-banner" role="dialog" aria-label="Open in the Materio app">
+  <!-- Stands down entirely while a real dialog is open, so it can never
+       stack on top of a form the visitor is filling in. -->
+  <div
+    class="mia-banner"
+    role="dialog"
+    aria-label="Open in the Materio app"
+    style="z-index: {underlayZ()}"
+    hidden={dialogOpen}
+  >
     {#if openFailed}
       <div class="mia-text">
         <strong>Couldn't open the app</strong>
@@ -169,7 +186,9 @@
     left: 12px;
     right: 12px;
     bottom: 12px;
-    z-index: 9000;
+    /* App furniture, not an overlay: sits above page chrome but always below
+       any dialog (z-index comes from underlayZ()). */
+    z-index: 1900;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -181,6 +200,12 @@
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
     font-size: 13px;
   }
+  /* `display: flex` above beats the UA's `[hidden]` rule, so restate it —
+       without this the "hidden while a dialog is open" toggle does nothing. */
+  .mia-banner[hidden] {
+    display: none !important;
+  }
+
   .mia-text {
     display: flex;
     flex-direction: column;

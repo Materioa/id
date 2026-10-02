@@ -3,6 +3,12 @@
 // Runtime types generated with workerd@1.20260820.1 2026-08-22 nodejs_als
 interface __BaseEnv_Env {
 	ASSETS: Fetcher;
+	PUBLIC_CDN_BASE?: string;
+	ADMIN_REVALIDATE_SECRET?: string;
+	URL_SIGNING_SECRET?: string;
+	MATERIO_CDN: R2Bucket;
+	materio_cdn: D1Database;
+	materio_cdn_cache: KVNamespace;
 	CLOUDINARY_CLOUD_NAME?: string;
 	CLOUDINARY_API_KEY?: string;
 	CLOUDINARY_API_SECRET?: string;

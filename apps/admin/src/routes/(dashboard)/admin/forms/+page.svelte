@@ -19,7 +19,7 @@
     confirmations: { name: string; label: string; required?: boolean }[];
     submitButton: { text: string; icon: string };
     fileUpload?: any; requiresAuth?: boolean; legacy?: string | null;
-    interview: { openingQuestion: string; systemPrompt: string; skipAllowed: boolean; asyncSubmit: boolean; completeMessage: string };
+    interview: { openingQuestion: string; introTitle?: string; introBody?: string; privacyNote?: string; tone?: string; showReview?: boolean; systemPrompt: string; skipAllowed: boolean; asyncSubmit: boolean; completeMessage: string };
     triggers: { examTypes: string[]; autoShow: boolean };
     magicJs?: string; magicEnabled?: boolean; trackingId?: string; trackViews?: boolean;
     updatedAt?: string;
@@ -204,7 +204,7 @@
       fileUpload: { enabled: false },
       requiresAuth: false,
       legacy: null,
-      interview: { openingQuestion: '', systemPrompt: '', skipAllowed: true, asyncSubmit: true, completeMessage: 'Thanks — your response has been recorded.' },
+      interview: { openingQuestion: '', introTitle: '', introBody: '', privacyNote: '', tone: '', showReview: true, systemPrompt: '', skipAllowed: true, asyncSubmit: true, completeMessage: 'Thanks — your response has been recorded.' },
       triggers: { examTypes: [], autoShow: false },
       magicJs: '', magicEnabled: false, trackingId: '', trackViews: true
     };
@@ -236,11 +236,16 @@
   }
   function editDoc(d: Doc) {
     try {
-      editing = plain({ steps: [], confirmations: [], submitButton: { text: 'Submit', icon: '' }, fileUpload: { enabled: false }, requiresAuth: false, legacy: null, interview: { openingQuestion: '', systemPrompt: '', skipAllowed: true, asyncSubmit: true, completeMessage: '' }, triggers: { examTypes: [], autoShow: false }, magicJs: '', magicEnabled: false, trackingId: '', trackViews: true, ...plain(d) });
-      // Backfill for docs saved before Magic & Beacons existed
+      editing = plain({ steps: [], confirmations: [], submitButton: { text: 'Submit', icon: '' }, fileUpload: { enabled: false }, requiresAuth: false, legacy: null, interview: { openingQuestion: '', introTitle: '', introBody: '', privacyNote: '', tone: '', showReview: true, systemPrompt: '', skipAllowed: true, asyncSubmit: true, completeMessage: '' }, triggers: { examTypes: [], autoShow: false }, magicJs: '', magicEnabled: false, trackingId: '', trackViews: true, ...plain(d) });
+      // Backfill for docs saved before these keys existed
       if (typeof editing.magicJs !== 'string') editing.magicJs = '';
       if (typeof editing.trackingId !== 'string') editing.trackingId = '';
       if (editing.trackViews === undefined) editing.trackViews = true;
+      editing.interview.introTitle ??= '';
+      editing.interview.introBody ??= '';
+      editing.interview.privacyNote ??= '';
+      editing.interview.tone ??= '';
+      if (editing.interview.showReview === undefined) editing.interview.showReview = true;
       editingRule = editing.kind === 'popup' ? plain(autoRule(editing.id) || defaultRule(editing.id)) : null;
       isNew = false; pickStep = 'edit'; editorTab = 'basics'; showEditor = true;
     } catch { /* toasted in plain() */ }
@@ -377,9 +382,24 @@
     editing = editing ? { ...editing } : editing;
   }
 
+  const TONES = [
+    { value: '', label: 'Default (warm and easy-going)' },
+    { value: 'gentle', label: 'Gentle and reassuring' },
+    { value: 'brisk', label: 'Brisk and to the point' },
+    { value: 'encouraging', label: 'Encouraging and upbeat' },
+    { value: 'plain', label: 'Plain and matter-of-fact' }
+  ];
+
+  const GUARDRAIL_PRESETS: Record<string, string> = {
+    gentle: 'Be gentle and reassuring. If someone hesitates or says they are not sure, reassure them and offer the options again rather than pressing.',
+    brisk: 'Keep it brisk. Acknowledge each answer in a few words and move straight to the next thing you need.',
+    encouraging: 'Be encouraging and upbeat. Celebrate good answers briefly, then move on — never flatter more than once per message.',
+    plain: 'Be plain and matter-of-fact. No filler praise, no small talk, just a friendly question at a time.'
+  };
+
   function editorTabs(kind: string): [string, string][] {
     if (kind === 'popup') return [['basics', 'Basics'], ['questions', 'Questions'], ['pages', 'Welcome pages'], ['auto', 'Auto-show'], ['magic', 'Magic & Beacons'], ['preview', 'Preview']];
-    return [['basics', 'Basics'], ['questions', 'Questions'], ['conversation', 'Conversation'], ['magic', 'Magic & Beacons'], ['preview', 'Preview']];
+    return [['basics', 'Basics'], ['questions', 'Questions'], ['conversation', 'Conversation'], ['guardrails', 'Guardrails'], ['magic', 'Magic & Beacons'], ['preview', 'Preview']];
   }
 
   function defaultRule(formId: string): Rule {
@@ -597,11 +617,82 @@
         {:else}<p class="text-xs text-muted-foreground">No welcome pages — visitors go straight to the questions.</p>{/each}
       </div>
     {:else if editorTab === 'conversation'}
-      <div class="grid gap-4">
-        <label class="fld">First message<textarea rows="2" bind:value={editing.interview.openingQuestion} placeholder="e.g. What would you like to share today?"></textarea></label>
-        <label class="fld">How the chat should behave <span class="hint">Short instructions, e.g. “Ask one question at a time and keep replies brief.”</span><textarea rows="3" bind:value={editing.interview.systemPrompt}></textarea></label>
-        <label class="fld">Closing message<textarea rows="2" bind:value={editing.interview.completeMessage}></textarea></label>
-        <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={editing.interview.skipAllowed} /> Let visitors skip a question</label>
+      <div class="grid gap-5">
+        <div>
+          <h4 class="font-semibold text-sm">Welcome screen</h4>
+          <p class="text-xs text-muted-foreground mt-0.5 mb-3">The first thing a visitor sees, before any questions.</p>
+          <div class="grid gap-3">
+            <label class="fld">Heading<input bind:value={editing.interview.introTitle} placeholder={editing.title || 'A quick conversation'} maxlength="120" /></label>
+            <label class="fld">Short intro <span class="hint">One or two sentences. Shown under the heading.</span><textarea rows="2" bind:value={editing.interview.introBody} placeholder="A couple of minutes and you've added something other students can use." maxlength="600"></textarea></label>
+          </div>
+        </div>
+
+        <hr class="border-border/60" />
+
+        <div>
+          <h4 class="font-semibold text-sm">What the visitor sees next</h4>
+          <div class="grid gap-3 mt-3">
+            <label class="fld">First message <span class="hint">The interviewer's opening line. Make it sound like a person.</span><textarea rows="2" bind:value={editing.interview.openingQuestion} placeholder="Hey — welcome in. What's on your mind?"></textarea></label>
+            <label class="fld">Privacy note <span class="hint">Optional. Shown on the welcome screen and again before they send. Use it to warn people off sharing names or contact details.</span><textarea rows="2" bind:value={editing.interview.privacyNote} placeholder="Please skip anything personal — no names or contact details." maxlength="400"></textarea></label>
+            <label class="fld">Closing message <span class="hint">Shown on the thank-you screen.</span><textarea rows="2" bind:value={editing.interview.completeMessage}></textarea></label>
+          </div>
+        </div>
+
+        <hr class="border-border/60" />
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="fld check"><input type="checkbox" bind:checked={editing.interview.skipAllowed} /> Let visitors skip a question</label>
+          <label class="fld check"><input type="checkbox" bind:checked={editing.interview.asyncSubmit} /> Send answers in the background</label>
+        </div>
+      </div>
+    {:else if editorTab === 'guardrails'}
+      <div class="grid gap-5">
+        <div class="rounded-xl border border-border/60 bg-muted/20 p-4 text-sm">
+          <b>These rules are always on</b>
+          <p class="text-xs text-muted-foreground m-0 mt-1">
+            The interviewer never asks twice for something already captured, never overwrites an answer that already
+            looks good, keeps to one question per message, and won't follow the visitor off-topic or take instructions
+            to change character. You don't need to write any of that below.
+          </p>
+        </div>
+
+        <label class="fld">Tone
+          <span class="hint">Sets the voice. Pick a starting point, then edit the text if you want.</span>
+          <div><Dropdown options={TONES} bind:value={editing.interview.tone} /></div>
+        </label>
+
+        <label class="fld">Extra instructions
+          <span class="hint">Anything specific to this form — what "a good answer" looks like, how to handle a common case, what to avoid.</span>
+          <textarea rows="6" bind:value={editing.interview.systemPrompt} placeholder="Ask one focused follow-up at a time until the question, subject and difficulty are known."></textarea>
+        </label>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-semibold text-sm">Tone presets</h4>
+            <span class="text-xs text-muted-foreground">Click to add to the instructions</span>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-2">
+            {#each Object.entries(GUARDRAIL_PRESETS) as [key, line] (key)}
+              <button
+                type="button"
+                class="tmpl"
+                onclick={() => {
+                  const existing = (editing.interview.systemPrompt || '').trim();
+                  if (existing.includes(line)) return;
+                  editing.interview.systemPrompt = existing ? `${existing}\n${line}` : line;
+                }}
+              >
+                <b>{key}</b>
+                <span>{line.slice(0, 90)}…</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <label class="fld check"><input type="checkbox" bind:checked={editing.interview.showReview} /> Show the review step before sending</label>
+        <p class="text-xs text-muted-foreground -mt-2">
+          Visitors get a last screen listing everything captured, editable, before it is written to the database.
+        </p>
       </div>
     {:else if editorTab === 'auto'}
       {#if editingRule}
@@ -683,10 +774,38 @@
           </div>
         </div>
       {:else}
-        <div class="pv-chat">
-          <div class="pv-msg"><span>M</span><p>{editing.interview.openingQuestion || editing.description || '...'}</p></div>
-          <div class="pv-msg user"><p>Visitors answer in their own words…</p><span>You</span></div>
-          <div class="pv-captured"><small>Captured automatically</small>{#each editing.fields.slice(0, 4) as f}<div><b>{f.label}</b></div>{/each}</div>
+        <div class="pv-iv">
+          <div class="pv-iv-bar">
+            <span class="pv-iv-brand">MATERIO</span>
+            <span class="pv-iv-mid">{editing.interview.introTitle || editing.title || 'Interviewer'}</span>
+            <span class="pv-iv-exit">End</span>
+          </div>
+          <div class="pv-iv-body">
+            <div class="pv-iv-hero">
+              <span class="pv-iv-mark">{(editing.title || 'M').slice(0, 1).toUpperCase()}</span>
+              <b>{editing.interview.introTitle || editing.title}</b>
+              <p>{editing.interview.introBody || editing.description || 'No intro written yet.'}</p>
+              <div class="pv-iv-chips">
+                <span>about {editing.fields.length <= 2 ? 'a minute' : 'a few minutes'}</span>
+                <span>{editing.fields.length} questions</span>
+                {#if editing.interview.skipAllowed}<span>skippable</span>{/if}
+              </div>
+              <div class="pv-iv-cta">Start</div>
+            </div>
+            {#if editing.interview.privacyNote}
+              <div class="pv-iv-note">{editing.interview.privacyNote}</div>
+            {/if}
+          </div>
+          <div class="pv-iv-thread">
+            <div class="pv-msg"><span>M</span><p>{editing.interview.openingQuestion || 'Opening message not written yet.'}</p></div>
+            <div class="pv-msg user"><p>…and a visitor reply goes here.</p><span>You</span></div>
+            <div class="pv-captured">
+              <small>Captured automatically</small>
+              {#each editing.fields.slice(0, 4) as f}<div><b>{f.label}</b></div>{/each}
+              {#if editing.fields.length > 4}<div class="pv-more">+ {editing.fields.length - 4} more</div>{/if}
+            </div>
+            <div class="pv-iv-input">Type your answer… <span class="pv-iv-send">↑</span></div>
+          </div>
           <p class="pv-link">Lives at /interviewer?form={editing.id || '…'}</p>
         </div>
       {/if}
@@ -718,14 +837,30 @@
       </div>
       <p class="text-xs text-muted-foreground mt-3">This is how it pops up over the site — same look as the promos. The live version is interactive.</p>
     {:else}
-      <div class="pv-chat">
-        <div class="pv-msg"><span>M</span><p>{previewDoc.interview?.openingQuestion || previewDoc.description}</p></div>
-        <div class="pv-msg user"><p>Visitors answer in their own words…</p><span>You</span></div>
-        <div class="pv-captured"><small>Captured automatically</small>{#each previewDoc.fields.slice(0, 5) as f}<div><b>{f.label}</b></div>{/each}</div>
+      <div class="pv-iv">
+        <div class="pv-iv-bar">
+          <span class="pv-iv-brand">MATERIO</span>
+          <span class="pv-iv-mid">{previewDoc.interview?.introTitle || previewDoc.title}</span>
+          <span class="pv-iv-exit">End</span>
+        </div>
+        <div class="pv-iv-body">
+          <div class="pv-iv-hero">
+            <span class="pv-iv-mark">{(previewDoc.title || 'M').slice(0, 1).toUpperCase()}</span>
+            <b>{previewDoc.interview?.introTitle || previewDoc.title}</b>
+            <p>{previewDoc.interview?.introBody || previewDoc.description}</p>
+            <div class="pv-iv-cta">Start</div>
+          </div>
+        </div>
+        <div class="pv-iv-thread">
+          <div class="pv-msg"><span>M</span><p>{previewDoc.interview?.openingQuestion || 'No opening message written.'}</p></div>
+          <div class="pv-msg user"><p>…and a visitor reply goes here.</p><span>You</span></div>
+          <div class="pv-captured"><small>Captured automatically</small>{#each previewDoc.fields.slice(0, 5) as f}<div><b>{f.label}</b></div>{/each}</div>
+        </div>
       </div>
       <div class="flex items-center gap-2 mt-3">
         <code class="text-xs">/interviewer?form={previewDoc.id}</code>
         <button class="text-xs underline" onclick={() => copyInterviewLink(previewDoc!)}>Copy link</button>
+        <a class="text-xs underline ml-auto" href="/interviewer?form={encodeURIComponent(previewDoc.id)}" target="_blank" rel="noopener">Open live ↗</a>
       </div>
     {/if}
   {/if}
@@ -824,4 +959,24 @@
   .pv-captured small { font-size: 10px; color: hsl(var(--muted-foreground)); display: block; margin-bottom: 4px; }
   .pv-captured div { font-size: 12px; margin-top: 3px; } .pv-captured b { text-transform: capitalize; font-weight: 600; }
   .pv-link { font-size: 11px; color: hsl(var(--muted-foreground)); margin: 0; }
+
+  /* Interviewer preview — mirrors the staged layout the visitor actually gets */
+  .pv-iv { border: 1px solid hsl(var(--border)); border-radius: 16px; overflow: hidden; background: hsl(var(--background)); }
+  .pv-iv-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid hsl(var(--border)); background: hsl(var(--card)); }
+  .pv-iv-brand { font-size: 9px; letter-spacing: .12em; font-weight: 700; color: hsl(var(--muted-foreground)); }
+  .pv-iv-mid { font-size: 11px; color: hsl(var(--foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pv-iv-exit { font-size: 10px; border: 1px solid hsl(var(--border)); border-radius: 999px; padding: 3px 9px; color: hsl(var(--muted-foreground)); }
+  .pv-iv-body { padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .pv-iv-hero { background: hsl(var(--accent) / .5); border: 1px solid hsl(var(--primary) / .16); border-radius: 14px; padding: 18px 14px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .pv-iv-mark { width: 34px; height: 34px; border-radius: 50%; border: 1px solid hsl(var(--primary) / .2); background: hsl(var(--card)); color: hsl(var(--primary)); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .pv-iv-hero b { font-family: var(--font-quadrant); font-weight: 400; font-size: 16px; letter-spacing: -.015em; }
+  .pv-iv-hero p { margin: 0; font-size: 11px; color: hsl(var(--muted-foreground)); line-height: 1.5; }
+  .pv-iv-chips { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+  .pv-iv-chips span { font-size: 9.5px; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); border-radius: 999px; padding: 2px 8px; color: hsl(var(--muted-foreground)); }
+  .pv-iv-cta { margin-top: 4px; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-radius: 999px; padding: 8px 18px; font-size: 11px; }
+  .pv-iv-note { display: flex; gap: 8px; font-size: 11px; line-height: 1.5; color: hsl(var(--muted-foreground)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 10px 12px; background: hsl(var(--card)); }
+  .pv-iv-thread { border-top: 1px solid hsl(var(--border)); padding: 14px; display: flex; flex-direction: column; gap: 11px; background: hsl(var(--muted) / .22); }
+  .pv-iv-input { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid hsl(var(--border)); border-radius: 12px; background: hsl(var(--card)); padding: 9px 12px; font-size: 11px; color: hsl(var(--muted-foreground)); }
+  .pv-iv-send { width: 22px; height: 22px; border-radius: 50%; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); display: grid; place-items: center; font-size: 11px; }
+  .pv-iv .pv-link { padding: 10px 14px; background: hsl(var(--card)); }
 </style>

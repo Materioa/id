@@ -8,6 +8,16 @@
   "workers_dev": true,
   "preview_urls": true,
   "routes": [{"pattern": "admin.getmaterio.app", "zone_name": "getmaterio.app", "custom_domain": true, "enabled": true, "previews_enabled": false}],
-  "vars": {},
+  "vars": {
+    // CDN backend switch: "github" (current, default) or "r2" (new infra).
+    // Flip to "r2" only after: R2 enabled + bucket created + 1.8GB uploaded + worker deployed.
+    "CDN_BACKEND": "github",
+    // At flip time set PUBLIC_CDN_BASE to the deployed worker URL, then to https://cdn.getmaterio.app at DNS cutover.
+    "PUBLIC_CDN_BASE": "https://cdn.getmaterio.app"
+  },
+  // --- NEW-INFRA BINDINGS (uncomment at flip time; bucket must exist or deploy fails) ---
+  // "r2_buckets": [{"binding": "MATERIO_CDN", "bucket_name": "materio-cdn"}],
+  // "d1_databases": [{"binding": "materio_cdn", "database_name": "materio-cdn", "database_id": "d99402e0-b7df-4d8d-9389-6cfb258f2e81"}],
+  // "kv_namespaces": [{"binding": "materio_cdn_cache", "id": "50dd64f73ff5478b8cf6c1ab84df23f7"}],
   "observability": {"logs": {"enabled": true}, "traces": {"enabled": true}}
 }

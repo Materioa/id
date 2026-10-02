@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Type check (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [accounts, admin, auth]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install
+        working-directory: apps/${{ matrix.app }}
+        run: npm install
+
+      - name: svelte-check
+        # All three apps are at zero errors, so this can gate hard. If the
+        # pre-existing warning count ever becomes an error, it should fail.
+        working-directory: apps/${{ matrix.app }}
+        run: npm run check
+
+  build:
+    name: Build (${{ matrix.app }})
+    needs: [check]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [accounts, admin, auth]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install
+        working-directory: apps/${{ matrix.app }}
+        run: npm install
+
+      - name: Build
+        working-directory: apps/${{ matrix.app }}
+        run: npm run build
+        env:
+          # Placeholders: nothing here should need real credentials to compile.
+          MONGODB_URI: mongodb://127.0.0.1:27017/ci
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          JWT_SECRET: ci-placeholder
