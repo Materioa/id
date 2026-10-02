@@ -263,8 +263,12 @@
         config = {
           enabled: res.config.enabled ?? true,
           viewRotationInterval: res.config.viewRotationInterval || 15000,
-          showBeforeDays: res.config.showBeforeDays || 9,
-          showBeforeDaysViva: res.config.showBeforeDaysViva || 3,
+          // `||` here discarded an admin-set 0, so a saved "show 0 days before"
+          // reloaded as the default (9 / 3) and the next save wrote the default
+          // back to the server — which is why the exam card kept appearing
+          // early no matter what was set here. Fall back only when absent.
+          showBeforeDays: res.config.showBeforeDays ?? 9,
+          showBeforeDaysViva: res.config.showBeforeDaysViva ?? 3,
           defaultCoverImage: globalCover,
           seatingDataUrl: globalSeating,
           semesters: rawSemesters.map((s: any) => ({
