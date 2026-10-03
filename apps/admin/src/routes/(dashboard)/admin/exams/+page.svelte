@@ -763,7 +763,7 @@
               startDate: '2026-04-06T09:00:00',
               endDate: '2026-04-11T17:00:00'
             },
-            seatingDataUrl: '/assets/data/viva.csv',
+            seatingDataUrl: '', // upload the fresh viva/practical CSV (Date, Division, Subject Name, Subject Code, Classroom) — do NOT point at the bundled /assets/data/viva.csv, it is a stale snapshot
             exams: [
               { id: 101, subject: 'Viva/Practical', type: 'viva', code: '303105000', date: '2026-04-06', time: '09:00', duration: 'full day' },
               { id: 102, subject: 'Viva/Practical', type: 'viva', code: '303105000', date: '2026-04-07', time: '09:00', duration: 'full day' },
