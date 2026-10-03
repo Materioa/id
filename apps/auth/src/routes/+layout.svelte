@@ -3,6 +3,7 @@
   import '../app.css';
   import { onMount } from 'svelte';
   import OpenInAppBanner from '@materio/ui/components/OpenInAppBanner.svelte';
+  import FloatingWindowControls from '@materio/ui/components/FloatingWindowControls.svelte';
 
   let { children } = $props();
 
@@ -33,3 +34,4 @@
 
 {@render children()}
 <OpenInAppBanner />
+<FloatingWindowControls />
