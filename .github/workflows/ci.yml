@@ -5,9 +5,23 @@ on:
     branches: [master, main]
   pull_request:
 
+# Cancel superseded runs on the same branch — saves a lot of CI minutes when
+# several commits land together.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+# Install through bun, never npm. The apps depend on workspace:* packages
+# (@materio/ui, @materio/config, @materio/utils) and npm fails with
+# EUNSUPPORTEDPROTOCOL ("Unsupported URL Type workspace:") before a single
+# check runs — every run of this workflow died in ~16s at `npm install`,
+# so master has been red since the workflow was added. The repo pins
+# packageManager bun@1.3.0 and commits bun.lock, so CI now does exactly
+# what a local build does: a frozen install from the workspace root (which
+# links the @materio/* packages), then the per-app script. The runner's
+# preinstalled node executes the svelte-kit/svelte-check bins themselves.
+# There is intentionally no deploy job: Cloudflare publishes are manual
+# (`wrangler deploy` from each app directory).
 
 jobs:
   check:
@@ -20,19 +34,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
+          bun-version: 1.3.0
 
-      - name: Install
-        working-directory: apps/${{ matrix.app }}
-        run: npm install
+      - name: Install workspaces
+        run: bun install --frozen-lockfile
 
       - name: svelte-check
         # All three apps are at zero errors, so this can gate hard. If the
         # pre-existing warning count ever becomes an error, it should fail.
         working-directory: apps/${{ matrix.app }}
-        run: npm run check
+        run: bun run check
 
   build:
     name: Build (${{ matrix.app }})
@@ -45,17 +58,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
+          bun-version: 1.3.0
 
-      - name: Install
-        working-directory: apps/${{ matrix.app }}
-        run: npm install
+      - name: Install workspaces
+        run: bun install --frozen-lockfile
 
       - name: Build
         working-directory: apps/${{ matrix.app }}
-        run: npm run build
+        run: bun run build
         env:
           # Placeholders: nothing here should need real credentials to compile.
           MONGODB_URI: mongodb://127.0.0.1:27017/ci
