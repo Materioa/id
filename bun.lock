@@ -58,6 +58,7 @@
       "dependencies": {
         "@hugeicons/core-free-icons": "^4.3.0",
         "@hugeicons/svelte": "^1.1.5",
+        "@lisse/svelte": "^0.7.2",
         "@materio/config": "workspace:*",
         "@materio/ui": "workspace:*",
         "@materio/utils": "workspace:*",
