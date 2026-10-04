@@ -70,7 +70,11 @@ jobs:
         run: bun run build
         env:
           # Placeholders: nothing here should need real credentials to compile.
+          # SUPABASE_ANON_KEY is the one that must be non-empty: server/utils.ts
+          # calls createClient(SUPABASE_URL, SUPABASE_ANON_KEY) at module scope
+          # and supabase-js throws "supabaseKey is required." on an empty key.
           MONGODB_URI: mongodb://127.0.0.1:27017/ci
           SUPABASE_URL: https://example.supabase.co
+          SUPABASE_ANON_KEY: ci-placeholder
           SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
           JWT_SECRET: ci-placeholder
