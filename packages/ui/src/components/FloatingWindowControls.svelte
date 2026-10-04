@@ -10,81 +10,107 @@
   // there is NO way to minimise/close while on these origins. In a regular
   // browser (or Android) nothing is rendered.
   //
-  // IPC note: the Tauri injection scripts run on every navigation, so
-  // `__TAURI_INTERNALS__` / `__TAURI__` exist here — but the main window's
-  // capability must also grant `remote.urls` for `*.getmaterio.app`,
-  // otherwise invoke() is rejected for this origin.
+  // IPC note: Tauri checks EVERY invoke against the ACL when the page is on a
+  // remote origin, and app-defined commands (app_window_*) are in no ACL
+  // manifest, so they are rejected on accounts/auth. The window plugin
+  // commands are grantable via the capability (core:window:allow-*), so they
+  // are tried as well - on every origin the capability's remote.urls covers.
+  // If all paths fail the reason is surfaced instead of silently doing nothing.
 
   let isDesktopApp = $state(false);
   let isMaximized = $state(false);
+  let lastError = $state('');
+  let hint = $state('');
+
+  const g = (): any => globalThis as any;
 
   const tauriWindow = (): any => {
     try {
-      const w: any = (globalThis as any);
-      if (w.__TAURI__?.window?.getCurrentWindow) return w.__TAURI__.window.getCurrentWindow();
+      if (g().__TAURI__?.window?.getCurrentWindow) return g().__TAURI__.window.getCurrentWindow();
     } catch {}
     return null;
   };
 
-  async function checkMaximized() {
-    if (!isDesktopApp) return;
-    try {
-      const t: any = (globalThis as any);
-      if (t.__TAURI__?.core?.invoke) {
-        isMaximized = Boolean(await t.__TAURI__.core.invoke('app_window_is_maximized'));
-        return;
+  /** Invoke each candidate command in turn (global API first, internals as a
+   *  fallback for origins where only __TAURI_INTERNALS__ is injected). */
+  async function invokeFirst<T = unknown>(
+    cmds: string[]
+  ): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
+    const t = g();
+    const paths: Array<(c: string) => Promise<any>> = [];
+    if (typeof t.__TAURI__?.core?.invoke === 'function') paths.push((c) => t.__TAURI__.core.invoke(c));
+    if (typeof t.__TAURI_INTERNALS__?.invoke === 'function') paths.push((c) => t.__TAURI_INTERNALS__.invoke(c));
+    let last = 'no-ipc-bridge';
+    for (const cmd of cmds) {
+      for (const p of paths) {
+        try {
+          return { ok: true, value: (await p(cmd)) as T };
+        } catch (e: any) {
+          last = String((e && (e.message || e.code)) || e);
+        }
       }
-    } catch {}
-    try {
-      const w = tauriWindow();
-      if (w) isMaximized = Boolean(await w.isMaximized());
-    } catch {}
+    }
+    return { ok: false, error: last };
   }
 
-  async function handleMinimize() {
+  function reportError(what: string, error: string) {
+    lastError = `${what}: ${error}`;
     try {
-      const t: any = (globalThis as any);
-      if (t.__TAURI__?.core?.invoke) {
-        await t.__TAURI__.core.invoke('app_window_minimize');
-        return;
-      }
+      (globalThis as any).__materioWindowControlError = lastError;
+      console.error('[FloatingWindowControls]', lastError);
     } catch {}
-    try {
-      const w = tauriWindow();
-      if (w) await w.minimize();
-    } catch {}
+    hint = lastError;
+    setTimeout(() => {
+      if (hint === lastError) hint = '';
+    }, 8000);
   }
 
-  async function handleToggleMaximize() {
-    try {
-      const t: any = (globalThis as any);
-      if (t.__TAURI__?.core?.invoke) {
-        await t.__TAURI__.core.invoke('app_window_toggle_maximize');
-        setTimeout(checkMaximized, 80);
-        return;
-      }
-    } catch {}
+  async function run(appCmd: string, pluginCmd: string, what: string) {
+    const r = await invokeFirst([appCmd, pluginCmd]);
+    if (r.ok) return true;
     try {
       const w = tauriWindow();
       if (w) {
-        await w.toggleMaximize();
-        setTimeout(checkMaximized, 80);
+        const fn = { 'app_window_minimize': 'minimize', 'app_window_toggle_maximize': 'toggleMaximize', 'app_window_close': 'close' }[appCmd];
+        if (fn && typeof w[fn] === 'function') {
+          await w[fn]();
+          return true;
+        }
       }
-    } catch {}
+    } catch (e: any) {
+      r.error = String((e && (e.message || e.code)) || e);
+    }
+    reportError(what, r.error);
+    return false;
+  }
+
+  async function checkMaximized() {
+    if (!isDesktopApp) return;
+    const r = await invokeFirst<boolean>(['app_window_is_maximized', 'plugin:window|is_maximized']);
+    if (r.ok) {
+      isMaximized = Boolean(r.value);
+      return;
+    }
+    try {
+      const w = tauriWindow();
+      if (w) isMaximized = Boolean(await w.isMaximized());
+    } catch (e: any) {
+      lastError = String((e && (e.message || e.code)) || e);
+    }
+  }
+
+  async function handleMinimize() {
+    if (await run('app_window_minimize', 'plugin:window|minimize', 'minimize')) return;
+  }
+
+  async function handleToggleMaximize() {
+    if (await run('app_window_toggle_maximize', 'plugin:window|toggle_maximize', 'toggle-maximize')) {
+      setTimeout(checkMaximized, 120);
+    }
   }
 
   async function handleClose() {
-    try {
-      const t: any = (globalThis as any);
-      if (t.__TAURI__?.core?.invoke) {
-        await t.__TAURI__.core.invoke('app_window_close');
-        return;
-      }
-    } catch {}
-    try {
-      const w = tauriWindow();
-      if (w) await w.close();
-    } catch {}
+    if (await run('app_window_close', 'plugin:window|close', 'close')) return;
   }
 
   onMount(() => {
@@ -107,7 +133,12 @@
 </script>
 
 {#if isDesktopApp}
-  <div class="floating-window-controls" aria-label="Window Controls">
+  <div
+    class="floating-window-controls"
+    aria-label="Window Controls"
+    title={lastError || undefined}
+    data-materio-window-control-error={lastError || undefined}
+  >
     <button
       type="button"
       class="window-control-btn btn-min"
@@ -162,6 +193,9 @@
       </svg>
     </button>
   </div>
+  {#if hint}
+    <div class="floating-window-controls-hint" role="status">{hint}</div>
+  {/if}
 {/if}
 
 <style>
@@ -234,5 +268,24 @@
   .window-control-btn.btn-close:active {
     background-color: #b22518;
     color: #ffffff;
+  }
+
+  /* Only ever visible when every invoke path failed - the reason used to be
+     swallowed, which made "the buttons do nothing" undiagnosable. */
+  .floating-window-controls-hint {
+    position: fixed;
+    top: 50px;
+    right: 12px;
+    z-index: 2147483640;
+    max-width: 340px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: #b22518;
+    color: #ffffff;
+    font: 500 11px/1.35 ui-sans-serif, system-ui, sans-serif;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    pointer-events: none;
   }
 </style>
