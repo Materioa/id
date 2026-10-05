@@ -299,13 +299,38 @@
   async function saveFullConfig(silent = false) {
     isSavingConfig = true;
     try {
-      await makeAdminRequest('exams/config', 'POST', config);
+      let lastErr: any = null;
+      // A response whose body is HTML (we prefix it "Server Error (5xx): <!DOCTYPE...>")
+      // did NOT come from this route's handler — that handler returns JSON on
+      // every path, including its own catch. It is Cloudflare's error page,
+      // i.e. the origin never answered: almost always a Mongo/DB timeout
+      // rather than a rejected write. An upsert of the same payload is
+      // idempotent, so retrying is safe and turns most of these into saves.
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await makeAdminRequest('exams/config', 'POST', config);
+          lastErr = null;
+          break;
+        } catch (e: any) {
+          lastErr = e;
+          const isEdgeError = /^Server Error \(\d{3}\):\s*<!DOCTYPE/i.test(String(e?.message || ''));
+          if (!isEdgeError || attempt === 3) break;
+          await new Promise((r) => setTimeout(r, attempt * 1200));
+        }
+      }
+      if (lastErr) throw lastErr;
+
       if (!silent) {
         addToast('Exam schedules and settings saved successfully!');
       }
     } catch (e: any) {
       console.error('Failed to save exam config:', e);
-      addToast(`Save failed: ${e.message || e}`);
+      const isEdgeError = /^Server Error \(\d{3}\):\s*<!DOCTYPE/i.test(String(e?.message || ''));
+      addToast(
+        isEdgeError
+          ? 'Server did not respond after 3 attempts. The save may not have landed — refresh and check before retrying.'
+          : `Save failed: ${e.message || e}`
+      );
     } finally {
       isSavingConfig = false;
     }
@@ -740,6 +765,243 @@
       editingPaperIndex = null;
     }
     scheduleForm.exams = scheduleForm.exams.filter((_, i) => i !== index);
+  }
+
+  // --- Class-wise viva/practical import -----------------------------------
+  // A theory paper is entered by hand: one subject, one date. A class-wise
+  // viva timetable is the inverse — the schedule IS the CSV (187 rows of
+  // date x division), and typing it in would be slow and wrong. So when Type
+  // is viva/practical the manual fields are replaced by one CSV import that
+  // generates an exam entry per (date, subject, code).
+  //
+  // The parser deliberately mirrors the naive split(',') reader in
+  // project-exodus/src/lib/utils/exam-card.js, including its
+  // `values.length >= headers.length` guard: a line the front-end would drop
+  // must not become an exam entry here, or we would render an exam the card
+  // never loads.
+  interface VivaImportEntry {
+    date: string;
+    subject: string;
+    code: string;
+    divisions: string[];
+    rooms: string[];
+  }
+
+  let vivaImportEntries = $state<VivaImportEntry[]>([]);
+  let vivaImportName = $state('');
+  let vivaImportError = $state('');
+  let vivaImportSkipped = $state(0);
+  let isImportingVivaCsv = $state(false);
+  // Plain `let`, not $state: Svelte proxies plain objects and a proxied File
+  // is not what FormData wants to be handed.
+  let vivaImportFile: File | null = null;
+
+  const isClasswiseImport = $derived(
+    isAddingSubject && (paperForm.type === 'viva' || paperForm.type === 'practical')
+  );
+
+  const vivaImportDateCount = $derived(
+    new Set(vivaImportEntries.map((e) => e.date)).size
+  );
+  const vivaImportSubjectCount = $derived(
+    new Set(vivaImportEntries.map((e) => e.subject)).size
+  );
+  const vivaImportRange = $derived(
+    vivaImportEntries.length > 0
+      ? `${vivaImportEntries[0].date} to ${vivaImportEntries[vivaImportEntries.length - 1].date}`
+      : ''
+  );
+
+  /** DD.MM.YYYY (the organiser's format) -> YYYY-MM-DD; already-ISO passes through. */
+  function normalizeImportDate(raw: string): string {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const dotted = /^(\d{2})[./](\d{2})[./](\d{4})$/.exec(raw);
+    if (dotted) return `${dotted[3]}-${dotted[2]}-${dotted[1]}`;
+    return '';
+  }
+
+  function parseClasswiseCsv(text: string): { entries: VivaImportEntry[]; skipped: number } {
+    const body = text.replace(/^\uFEFF/, '').trim();
+    if (!body) throw new Error('That file is empty.');
+
+    const lines = body.split(/\r?\n/);
+    const headers = lines[0].split(',').map((h) => h.trim());
+
+    const missing = ['Date', 'Division', 'Subject Name', 'Subject Code'].filter(
+      (h) => !headers.includes(h)
+    );
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. ` +
+          'Expected header: Date,Division,Subject Name,Subject Code,Classroom'
+      );
+    }
+
+    const at = (name: string) => headers.indexOf(name);
+    const iDate = at('Date');
+    const iDiv = at('Division');
+    const iSub = at('Subject Name');
+    const iCode = at('Subject Code');
+    // The organiser sheet labels the room column differently — accept all three,
+    // same as buildVivaTimelineEntries() does on the other side.
+    const iRoom =
+      ['Classroom', 'Location', 'Practical Room']
+        .map((n) => headers.indexOf(n))
+        .find((i) => i >= 0) ?? -1;
+
+    const groups = new Map<string, VivaImportEntry>();
+    let skipped = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',');
+      if (values.length < headers.length) {
+        skipped++;
+        continue;
+      }
+      const cell = (idx: number) => (idx >= 0 ? (values[idx] || '').trim() : '');
+
+      const date = normalizeImportDate(cell(iDate));
+      if (!date) {
+        skipped++;
+        continue;
+      }
+
+      const subject = cell(iSub);
+      const code = cell(iCode);
+      const division = cell(iDiv);
+      const room = iRoom >= 0 ? cell(iRoom) : '';
+
+      // '-' cells mean "no exam here" in the sheet, not a subject named '-'.
+      if (!subject || subject === '-') continue;
+
+      const key = `${date}|${subject}|${code}`;
+      let entry = groups.get(key);
+      if (!entry) {
+        entry = { date, subject, code, divisions: [], rooms: [] };
+        groups.set(key, entry);
+      }
+      if (division && division !== '-' && !entry.divisions.includes(division)) {
+        entry.divisions.push(division);
+      }
+      if (room && room !== '-' && !entry.rooms.includes(room)) {
+        entry.rooms.push(room);
+      }
+    }
+
+    if (groups.size === 0) {
+      throw new Error('No usable rows found — check the header and the Date column.');
+    }
+
+    const entries = [...groups.values()].sort((a, b) =>
+      a.date === b.date ? a.subject.localeCompare(b.subject) : a.date.localeCompare(b.date)
+    );
+    return { entries, skipped };
+  }
+
+  function resetClasswiseImport() {
+    vivaImportFile = null;
+    vivaImportEntries = [];
+    vivaImportName = '';
+    vivaImportError = '';
+    vivaImportSkipped = 0;
+  }
+
+  async function handleClasswiseCsvPick(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    // Clear first so picking the same file twice still fires a change event.
+    input.value = '';
+    resetClasswiseImport();
+    if (!file) return;
+
+    if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
+      vivaImportError = 'Please choose a .csv file.';
+      return;
+    }
+
+    try {
+      const { entries, skipped } = parseClasswiseCsv(await file.text());
+      vivaImportFile = file;
+      vivaImportEntries = entries;
+      vivaImportSkipped = skipped;
+      vivaImportName = file.name;
+    } catch (err: any) {
+      vivaImportError = err?.message || 'Could not read that file.';
+    }
+  }
+
+  async function applyClasswiseImport() {
+    if (vivaImportEntries.length === 0 || !vivaImportFile) {
+      addToast('Choose a class-wise CSV first');
+      return;
+    }
+    const time = paperForm.time.trim();
+    const duration = paperForm.duration.trim();
+    if (!time) {
+      addToast('Set the start time');
+      return;
+    }
+    if (!duration) {
+      addToast('Set the duration');
+      return;
+    }
+
+    isImportingVivaCsv = true;
+    try {
+      // 1. Host the file. getVivaScheduleUrl() reads the period's
+      //    seatingDataUrl, so without a URL the schedule generated below is
+      //    never fetched by the exam card.
+      const sem = scheduleForm.semester;
+      const periodName = (
+        scheduleForm.periodShortName ||
+        scheduleForm.periodName ||
+        'viva'
+      ).replace(/[^a-zA-Z0-9_-]/g, '');
+      const path = `exams/seating/sem${sem}-${periodName}-master-${Date.now()}.csv`;
+      scheduleForm.seatingDataUrl = await uploadFileToServer(vivaImportFile, path);
+
+      // 2. The period window has to cover every generated date, or
+      //    isExamPeriodRunning() is false and the viva box never opens. This
+      //    also clears the stale April dates the new-period template ships with.
+      const dates = vivaImportEntries.map((e) => e.date).sort();
+      scheduleForm.startDate = dates[0];
+      scheduleForm.endDate = dates[dates.length - 1];
+
+      // 3. Replace every existing row of this type: the CSV is the source of
+      //    truth for it, so a re-import updates rather than duplicates.
+      const type = paperForm.type;
+      scheduleForm.exams = scheduleForm.exams.filter((x) => x.type !== type);
+      scheduleForm.exams.push(
+        ...vivaImportEntries.map((e) => ({
+          id: `${Date.now()}-${e.date}-${e.subject.replace(/\W+/g, '')}`,
+          subject: e.subject,
+          type,
+          code: e.code,
+          date: e.date,
+          time,
+          duration
+        }))
+      );
+
+      scheduleForm.exams.sort((a, b) => {
+        const tA = new Date(`${a.date}T${a.time || '00:00'}`).getTime();
+        const tB = new Date(`${b.date}T${b.time || '00:00'}`).getTime();
+        return tA - tB;
+      });
+
+      const count = vivaImportEntries.length;
+      addToast(
+        `Imported ${count} ${type} entries (${vivaImportRange}); period set to ${scheduleForm.startDate} - ${scheduleForm.endDate}`
+      );
+      resetClasswiseImport();
+      isAddingSubject = false;
+      editingPaperIndex = null;
+      showSubjectAdvanced = false;
+    } catch (err: any) {
+      addToast(`Import failed: ${err?.message || err}`);
+    } finally {
+      isImportingVivaCsv = false;
+    }
   }
 
   // Quick Seed from standard examdata structure
@@ -1758,7 +2020,9 @@
           {#if isAddingSubject}
             <div class="rounded-xl border border-primary/50 bg-primary/5 p-4 space-y-4 animate-in fade-in duration-200 shadow-2xs">
               <div class="flex items-center justify-between pb-1 border-b border-primary/20">
-                <span class="text-xs font-semibold text-foreground">New subject</span>
+                <span class="text-xs font-semibold text-foreground">
+                  {isClasswiseImport ? 'Import class-wise schedule' : 'New subject'}
+                </span>
                 <button
                   type="button"
                   onclick={cancelSubjectForm}
@@ -1770,73 +2034,205 @@
 
               <!-- Subject essentials -->
               <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div class="sm:col-span-6 space-y-1">
-                  <label for="newPaperSubject" class="text-xs font-medium text-muted-foreground">Subject name</label>
-                  <input
-                    id="newPaperSubject"
-                    type="text"
-                    bind:value={paperForm.subject}
-                    class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
-                    placeholder="e.g. Compiler Design"
-                  />
-                </div>
+                {#if !isClasswiseImport}
+                  <div class="sm:col-span-6 space-y-1">
+                    <label for="newPaperSubject" class="text-xs font-medium text-muted-foreground">Subject name</label>
+                    <input
+                      id="newPaperSubject"
+                      type="text"
+                      bind:value={paperForm.subject}
+                      class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
+                      placeholder="e.g. Compiler Design"
+                    />
+                  </div>
 
-                <div class="sm:col-span-3 space-y-1">
-                  <label for="newPaperCode" class="text-xs font-medium text-muted-foreground">Code</label>
-                  <input
-                    id="newPaperCode"
-                    type="text"
-                    bind:value={paperForm.code}
-                    class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
-                    placeholder="e.g. 303105349"
-                  />
-                </div>
+                  <div class="sm:col-span-3 space-y-1">
+                    <label for="newPaperCode" class="text-xs font-medium text-muted-foreground">Code</label>
+                    <input
+                      id="newPaperCode"
+                      type="text"
+                      bind:value={paperForm.code}
+                      class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
+                      placeholder="e.g. 303105349"
+                    />
+                  </div>
 
-                <div class="sm:col-span-3 space-y-1">
-                  <label for="newPaperType" class="text-xs font-medium text-muted-foreground">Type</label>
-                  <Dropdown
-                    id="newPaperType"
-                    bind:value={paperForm.type}
-                    options={examTypeOptions}
-                  />
-                </div>
+                  <div class="sm:col-span-3 space-y-1">
+                    <label for="newPaperType" class="text-xs font-medium text-muted-foreground">Type</label>
+                    <Dropdown
+                      id="newPaperType"
+                      bind:value={paperForm.type}
+                      options={examTypeOptions}
+                    />
+                  </div>
+                {:else}
+                  <div class="sm:col-span-4 space-y-1">
+                    <label for="newPaperType" class="text-xs font-medium text-muted-foreground">Type</label>
+                    <Dropdown
+                      id="newPaperType"
+                      bind:value={paperForm.type}
+                      options={examTypeOptions}
+                    />
+                  </div>
+
+                  <p class="sm:col-span-8 self-end text-[11px] text-muted-foreground leading-relaxed">
+                    Subject, code and date are read from the class-wise CSV below — only the timing
+                    is entered here.
+                  </p>
+                {/if}
               </div>
 
-              <!-- Date, Time, Duration -->
+              <!-- Timing. For a class-wise import this is the only manual part: the dates come
+                   from the CSV, so the Date input is meaningless here. -->
               <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div class="sm:col-span-4 space-y-1">
-                  <label for="newPaperDate" class="text-xs font-medium text-muted-foreground">Date</label>
-                  <input
-                    id="newPaperDate"
-                    type="date"
-                    bind:value={paperForm.date}
-                    class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
-                  />
-                </div>
+                {#if !isClasswiseImport}
+                  <div class="sm:col-span-4 space-y-1">
+                    <label for="newPaperDate" class="text-xs font-medium text-muted-foreground">Date</label>
+                    <input
+                      id="newPaperDate"
+                      type="date"
+                      bind:value={paperForm.date}
+                      class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
+                    />
+                  </div>
 
-                <div class="sm:col-span-4 space-y-1">
-                  <label for="newPaperTime" class="text-xs font-medium text-muted-foreground">Time</label>
-                  <input
-                    id="newPaperTime"
-                    type="text"
-                    bind:value={paperForm.time}
-                    class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
-                    placeholder="14:00"
-                  />
-                </div>
+                  <div class="sm:col-span-4 space-y-1">
+                    <label for="newPaperTime" class="text-xs font-medium text-muted-foreground">Time</label>
+                    <input
+                      id="newPaperTime"
+                      type="text"
+                      bind:value={paperForm.time}
+                      class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
+                      placeholder="14:00"
+                    />
+                  </div>
 
-                <div class="sm:col-span-4 space-y-1">
-                  <label for="newPaperDuration" class="text-xs font-medium text-muted-foreground">Duration</label>
-                  <input
-                    id="newPaperDuration"
-                    type="text"
-                    bind:value={paperForm.duration}
-                    class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
-                    placeholder="150 mins"
-                  />
-                </div>
+                  <div class="sm:col-span-4 space-y-1">
+                    <label for="newPaperDuration" class="text-xs font-medium text-muted-foreground">Duration</label>
+                    <input
+                      id="newPaperDuration"
+                      type="text"
+                      bind:value={paperForm.duration}
+                      class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
+                      placeholder="150 mins"
+                    />
+                  </div>
+                {:else}
+                  <div class="sm:col-span-6 space-y-1">
+                    <label for="newPaperTime" class="text-xs font-medium text-muted-foreground">Time (applies to all)</label>
+                    <input
+                      id="newPaperTime"
+                      type="text"
+                      bind:value={paperForm.time}
+                      class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
+                      placeholder="09:00"
+                    />
+                  </div>
+
+                  <div class="sm:col-span-6 space-y-1">
+                    <label for="newPaperDuration" class="text-xs font-medium text-muted-foreground">Duration (applies to all)</label>
+                    <input
+                      id="newPaperDuration"
+                      type="text"
+                      bind:value={paperForm.duration}
+                      class="w-full bg-transparent border-0 border-b border-border/80 focus:border-primary rounded-none px-0 py-1.5 text-sm focus:outline-none transition-colors"
+                      placeholder="full day"
+                    />
+                  </div>
+                {/if}
               </div>
 
+              {#if isClasswiseImport}
+                <p class="-mt-1 text-[11px] text-muted-foreground">
+                  Both apply to every imported entry — edit individual rows in the list afterwards.
+                </p>
+
+                <!-- The class-wise CSV itself -->
+                <div class="rounded-xl border border-dashed border-border/70 bg-muted/15 p-4 space-y-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="space-y-0.5 min-w-0">
+                      <span class="text-xs font-semibold text-foreground">Class-wise schedule (.csv)</span>
+                      <p class="text-[11px] text-muted-foreground">
+                        Header: Date, Division, Subject Name, Subject Code, Classroom. Re-importing
+                        replaces all existing {paperForm.type} entries.
+                      </p>
+                    </div>
+
+                    <label
+                      class="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/60 hover:bg-muted/50 text-foreground text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      <HugeiconsIcon
+                        icon={isImportingVivaCsv ? Loading03Icon : CloudUploadIcon}
+                        size={14}
+                        class={isImportingVivaCsv ? 'animate-spin' : ''}
+                      />
+                      <span>{vivaImportName ? 'Replace file' : 'Choose .csv'}</span>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onchange={handleClasswiseCsvPick}
+                        class="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {#if vivaImportError}
+                    <p class="text-[11px] text-destructive">{vivaImportError}</p>
+                  {/if}
+
+                  {#if vivaImportEntries.length > 0}
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                      <span class="font-medium text-foreground">
+                        {vivaImportEntries.length} entries
+                      </span>
+                      <span class="text-muted-foreground">{vivaImportDateCount} dates</span>
+                      <span class="text-muted-foreground">{vivaImportSubjectCount} subjects</span>
+                      <span class="text-muted-foreground truncate max-w-48">{vivaImportName}</span>
+                      {#if vivaImportSkipped > 0}
+                        <span class="text-amber-600 dark:text-amber-400">
+                          {vivaImportSkipped} row(s) skipped
+                        </span>
+                      {/if}
+                    </div>
+
+                    <div class="max-h-52 overflow-y-auto rounded-lg border border-border/50">
+                      <table class="w-full text-[11px]">
+                        <thead class="sticky top-0 bg-muted/80 backdrop-blur">
+                          <tr class="text-left text-muted-foreground">
+                            <th class="px-2.5 py-1.5 font-medium">Date</th>
+                            <th class="px-2.5 py-1.5 font-medium">Subject</th>
+                            <th class="px-2.5 py-1.5 font-medium">Code</th>
+                            <th class="px-2.5 py-1.5 font-medium text-right">Classes</th>
+                            <th class="px-2.5 py-1.5 font-medium text-right">Rooms</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each vivaImportEntries as e, i (`${e.date}|${e.subject}|${e.code}|${i}`)}
+                            <tr class="border-t border-border/30">
+                              <td class="px-2.5 py-1.5 whitespace-nowrap">{e.date}</td>
+                              <td class="px-2.5 py-1.5">{e.subject}</td>
+                              <td class="px-2.5 py-1.5 font-mono">{e.code}</td>
+                              <td class="px-2.5 py-1.5 text-right text-muted-foreground">
+                                {e.divisions.length}
+                              </td>
+                              <td class="px-2.5 py-1.5 text-right text-muted-foreground">
+                                {e.rooms.length}
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <p class="text-[11px] text-muted-foreground leading-relaxed">
+                      On import this hosts the file as the period's seating CSV, sets the period
+                      window to {vivaImportRange}, and creates one entry per date/subject/code.
+                    </p>
+                  {/if}
+                </div>
+              {/if}
+
+              {#if !isClasswiseImport}
               <!-- Subject Cover Image (Rendered only, no text link) -->
               <div class="space-y-2 pt-1">
                 <div class="flex items-center justify-between">
@@ -1944,6 +2340,7 @@
                   </div>
                 {/if}
               </div>
+              {/if}
 
               <div class="flex items-center justify-end gap-2 pt-2 border-t border-primary/20">
                 <button
@@ -1955,10 +2352,18 @@
                 </button>
                 <button
                   type="button"
-                  onclick={saveSubjectForm}
-                  class="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-all cursor-pointer shadow-2xs"
+                  onclick={() => (isClasswiseImport ? applyClasswiseImport() : saveSubjectForm())}
+                  disabled={isClasswiseImport &&
+                    (vivaImportEntries.length === 0 || isImportingVivaCsv)}
+                  class="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Add subject
+                  {#if isImportingVivaCsv}
+                    Importing...
+                  {:else if isClasswiseImport}
+                    Import {vivaImportEntries.length} entries
+                  {:else}
+                    Add subject
+                  {/if}
                 </button>
               </div>
             </div>

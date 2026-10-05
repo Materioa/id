@@ -23,10 +23,19 @@ export async function POST({ request }) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileName = path || `upload-${Date.now()}-${file.name}`;
-    
+
+    // The exam card fetches seating/viva CSVs with a bare `fetch(url)` — no
+    // auth header, no cookie. So those objects have to live in a public
+    // bucket: getPublicUrl() against the private `attachments` bucket returns
+    // a link that 404s for every client, which is exactly how the division
+    // selector and viva timeline went blank (and how the front-end was left
+    // retrying a schedule it could never download).
+    const needsPublicUrl = fileName.startsWith('exams/seating/');
+    const bucket = needsPublicUrl ? 'profile-pictures' : 'attachments';
+
     const { error: uploadError } = await supabaseAdmin
       .storage
-      .from('attachments')
+      .from(bucket)
       .upload(fileName, buffer, { 
         contentType: file.type,
         upsert: true
@@ -36,7 +45,7 @@ export async function POST({ request }) {
 
     const { data: { publicUrl } } = supabaseAdmin
       .storage
-      .from('attachments')
+      .from(bucket)
       .getPublicUrl(fileName);
 
     return json({ success: true, url: publicUrl });
