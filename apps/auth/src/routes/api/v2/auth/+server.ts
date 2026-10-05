@@ -12,19 +12,16 @@ import {
 } from '$lib/server/utils';
 import { sendOTPEmail } from '$lib/server/mailer';
 import { getOTPTemplate } from '$lib/server/otp_template';
+import { buildOAuthMetadata } from '$lib/server/oauth-metadata';
+import { csrfGuard } from '$lib/server/csrf';
 import crypto from 'node:crypto';
 import { env } from '$env/dynamic/private';
 const DEFAULT_ISSUER = 'https://getmaterio.app';
-const DEFAULT_SCOPES = 'openid profile email offline_access admin';
 
 function getIssuer(req: Request) {
   const proto = req.headers.get('x-forwarded-proto') || 'https';
   const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
   return env.OAUTH_ISSUER || (host ? `${proto}://${host}` : DEFAULT_ISSUER);
-}
-
-function getAuthBaseUrl(req: Request) {
-  return env.OAUTH_PUBLIC_BASE_URL || getIssuer(req);
 }
 
 function normalizeScope(scope: any) {
@@ -107,10 +104,56 @@ export async function GET({ request, url }: any) {
   return handleMain(request, url);
 }
 
+/**
+ * Reads a POST body into a plain object.
+ *
+ * The OAuth token endpoint is required to accept
+ * `application/x-www-form-urlencoded` (RFC 6749 section 4.1.3), which is what
+ * MCP clients such as opencode actually send. Previously only JSON was parsed,
+ * so form-encoded token requests fell through to "Invalid action".
+ */
+async function parseRequestBody(req: Request): Promise<any> {
+  const contentType = (req.headers.get('content-type') || '').toLowerCase();
+
+  if (contentType.includes('application/json')) {
+    return req.json().catch(() => ({} as any));
+  }
+
+  if (
+    contentType.includes('application/x-www-form-urlencoded') ||
+    contentType.includes('multipart/form-data')
+  ) {
+    const form = await req.formData().catch(() => null);
+    if (!form) return {};
+    const out: Record<string, any> = {};
+    for (const [key, value] of form.entries()) {
+      out[key] = typeof value === 'string' ? value : (value?.name ?? '');
+    }
+    return out;
+  }
+
+  // Unknown or missing content type: inspect the raw payload once.
+  const text = await req.text().catch(() => '');
+  const trimmed = text.trim();
+  if (!trimmed) return {};
+
+  if (trimmed.startsWith('{')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {}
+  }
+
+  try {
+    return Object.fromEntries(new URLSearchParams(trimmed));
+  } catch {}
+
+  return {};
+}
+
 async function handleMain(req: Request, url: URL) {
   let bodyData: any = {};
   if (req.method === 'POST') {
-    bodyData = await req.json().catch(() => ({} as any));
+    bodyData = await parseRequestBody(req);
   }
 
   let action = url.searchParams.get('action') || bodyData.action;
@@ -167,35 +210,9 @@ async function handleMain(req: Request, url: URL) {
 };
 
 async function handleOAuthMetadata(req: Request, bodyData: any, url: URL, oidc = false) {
-  const issuer = getIssuer(req);
-  const baseUrl = getAuthBaseUrl(req);
-  const metadata = {
-    issuer,
-    authorization_endpoint: `${baseUrl}/account/sso`,
-    token_endpoint: `${baseUrl}/api/v2/auth`,
-    jwks_uri: `${baseUrl}/api/v2/auth?action=jwks`,
-    registration_endpoint: `${baseUrl}/api/v2/auth?action=oauth_register_app`,
-    revocation_endpoint: `${baseUrl}/api/v2/auth?action=oauth_revoke`,
-    introspection_endpoint: `${baseUrl}/api/v2/auth?action=oauth_introspect`,
-    userinfo_endpoint: `${baseUrl}/api/v2/auth?action=userinfo`,
-    end_session_endpoint: `${baseUrl}/api/v2/auth?action=logout`,
-    response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code', 'refresh_token'],
-    token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
-    code_challenge_methods_supported: ['S256'],
-    scopes_supported: DEFAULT_SCOPES.split(' '),
-    claims_supported: ['sub', 'email', 'email_verified', 'preferred_username', 'name', 'picture', 'auth_time'],
-    subject_types_supported: ['public'],
-    id_token_signing_alg_values_supported: [env.OIDC_PRIVATE_KEY || env.OIDC_PRIVATE_KEY_B64 ? 'RS256' : 'HS256']
-  };
-
-  if (!oidc) {
-    delete metadata.claims_supported;
-    delete metadata.subject_types_supported;
-    delete metadata.id_token_signing_alg_values_supported;
-  }
-
-  return json(metadata, { status: 200 });
+  // Rendered from the shared module so this endpoint and the
+  // /.well-known/* discovery documents can never disagree.
+  return json(buildOAuthMetadata(req, oidc), { status: 200 });
 }
 
 async function handleJwks(req: Request, bodyData: any, url: URL) {
@@ -795,6 +812,11 @@ async function handleOAuthRegisterApp(req: Request, bodyData: any, url: URL) {
     }
 
     // Existing dashboard app registration for authenticated Materio users.
+    // Cookie-authenticated and state-changing, so it needs the same-origin guard.
+    // (The RFC 7591 branch above stays open: it is unauthenticated by design.)
+    const csrfError = csrfGuard(req);
+    if (csrfError) return csrfError;
+
     const user = await getAuthedUser(req);
     if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -830,6 +852,9 @@ async function handleOAuthRegisterApp(req: Request, bodyData: any, url: URL) {
 }
 async function handleOAuthDeleteApp(req: Request, bodyData: any, url: URL) {
   try {
+    const csrfError = csrfGuard(req);
+    if (csrfError) return csrfError;
+
     const user = await getAuthedUser(req);
     if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -899,6 +924,10 @@ async function handleOAuthAuthorize(req: Request, bodyData: any, url: URL) {
       prompt,
       auth_time
     } = bodyData || {};
+
+    // Issues an authorization code against the logged-in user's session cookie.
+    const csrfError = csrfGuard(req);
+    if (csrfError) return csrfError;
 
     const user = await getAuthedUser(req);
     if (!user) {
