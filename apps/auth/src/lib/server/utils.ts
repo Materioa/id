@@ -5,12 +5,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import crypto from 'node:crypto';
+import { SESSION_TTL_SECONDS, SESSION_TTL_MS, SESSION_TOUCH_INTERVAL_MS, isSessionExpired } from '@materio/config/session';
 
 const SUPABASE_URL = env.SUPABASE_URL || publicEnv.PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = env.SUPABASE_ANON_KEY || publicEnv.PUBLIC_SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_KEY = env.SUPABASE_SERVICE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ADMIN_KEY || '';
 const JWT_SECRET = env.JWT_SECRET || 'secret';
-const JWT_EXPIRES_IN = env.JWT_EXPIRES_IN || '24h';
+// Must match the user_sessions row lifetime and the cookie max-age, so it
+// comes from the shared config rather than a per-app env var (was 24h).
+const JWT_EXPIRES_IN = SESSION_TTL_SECONDS;
 
 // Initialize Supabase clients
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -129,24 +132,68 @@ export const generateOpaqueToken = (bytes = 32) => crypto.randomBytes(bytes).toS
 export const hashToken = (token: string) => crypto.createHash('sha256').update(String(token)).digest('hex');
 
 export const verifyToken = async (token: string) => {
+  let decoded: any;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    
-    // Check if session exists in DB for proper revocation (only for web dashboard sessions, not OAuth access tokens)
-    if (decoded.jti && decoded.token_use !== '2fa_temp' && !decoded.client_id) {
-      const { data: session } = await supabaseAdmin
-        .from('user_sessions')
-        .select('id')
-        .eq('id', decoded.jti)
-        .single();
-        
-      if (!session) return null; // Session was revoked
-    }
-    
-    return decoded;
+    decoded = jwt.verify(token, JWT_SECRET) as any;
   } catch (error) {
     return null;
   }
+
+  // Web dashboard sessions are backed by a user_sessions row so they can be
+  // revoked (not OAuth access tokens or 2FA temp tokens).
+  if (decoded.jti && decoded.token_use !== '2fa_temp' && !decoded.client_id) {
+    try {
+      const { data: session, error } = await supabaseAdmin
+        .from('user_sessions')
+        .select('id, created_at, last_active_at')
+        .eq('id', decoded.jti)
+        .maybeSingle();
+
+      if (error || !session) return null; // revoked / logged out
+
+      if (isSessionExpired(session)) {
+        await supabaseAdmin.from('user_sessions').delete().eq('id', session.id);
+        return null;
+      }
+
+      // Keep "last active" in Accounts → Security honest, without a write per request.
+      const lastActive = Date.parse(session.last_active_at || '') || 0;
+      if (Date.now() - lastActive > SESSION_TOUCH_INTERVAL_MS) {
+        await supabaseAdmin
+          .from('user_sessions')
+          .update({ last_active_at: new Date().toISOString() })
+          .eq('id', session.id);
+      }
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return decoded;
+};
+
+/**
+ * Deletes the user_sessions row behind a token. Accepts already-expired
+ * tokens (signature still checked) so logging out after expiry still cleans
+ * up the row instead of leaving it in the active sessions list.
+ */
+export const revokeSessionToken = async (token: string) => {
+  if (!token) return false;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true }) as any;
+    if (!decoded?.jti || decoded.client_id) return false;
+    const { error } = await supabaseAdmin.from('user_sessions').delete().eq('id', decoded.jti);
+    return !error;
+  } catch {
+    return false;
+  }
+};
+
+/** Removes a user's sessions whose tokens have outlived SESSION_TTL. */
+export const pruneExpiredSessions = async (userId: string) => {
+  if (!userId) return;
+  const cutoff = new Date(Date.now() - SESSION_TTL_MS).toISOString();
+  await supabaseAdmin.from('user_sessions').delete().eq('user_id', userId).lt('created_at', cutoff);
 };
 
 // Generate unique recovery key

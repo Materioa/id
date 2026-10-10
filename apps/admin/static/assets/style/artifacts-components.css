@@ -1,0 +1,572 @@
+/* Artifact Viewport - Unified Styling & Component System */
+
+/* 1. Base Resets & Typography */
+body.artifact-viewport {
+    font-family: var(--font-primary, "PP Mori", system-ui, -apple-system, BlinkMacSystemFont, sans-serif);
+    color: var(--text, #000000);
+    background-color: transparent !important;
+    margin: 0;
+    padding: 10px;
+    box-sizing: border-box;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+body.artifact-viewport * {
+    box-sizing: border-box;
+}
+
+/* Headings */
+body.artifact-viewport h1, 
+body.artifact-viewport h2, 
+body.artifact-viewport h3, 
+body.artifact-viewport h4, 
+body.artifact-viewport h5, 
+body.artifact-viewport h6 {
+    font-family: var(--font-primary, "PP Mori", sans-serif);
+    font-weight: 600;
+    color: var(--text, #000000);
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+}
+
+body.artifact-viewport h1 { font-size: 1.5rem; }
+body.artifact-viewport h2 { font-size: 1.3rem; }
+body.artifact-viewport h3 { font-size: 1.15rem; }
+body.artifact-viewport h4 { font-size: 1rem; }
+
+/* 2. Interactive Controls - Inputs & Selects */
+body.artifact-viewport input[type="text"],
+body.artifact-viewport input[type="number"],
+body.artifact-viewport input[type="email"],
+body.artifact-viewport input[type="password"],
+body.artifact-viewport textarea,
+body.artifact-viewport select {
+    width: 100%;
+    padding: 8px 12px;
+    font-family: inherit;
+    font-size: 13.5px;
+    border-radius: var(--squircle-inner, 8px);
+    border: 1px solid var(--border, #ddd);
+    background-color: var(--card-bg, #ffffff);
+    color: var(--text, #000000);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+body.artifact-viewport input[type="text"]:focus,
+body.artifact-viewport input[type="number"]:focus,
+body.artifact-viewport textarea:focus,
+body.artifact-viewport select:focus {
+    border-color: var(--primary, #ff5400);
+    box-shadow: 0 0 0 2px rgba(255, 84, 0, 0.2);
+}
+
+body.artifact-viewport textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+body.artifact-viewport label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    opacity: 0.85;
+    display: inline-block;
+    margin-bottom: 4px;
+}
+
+/* 3. Slider Control (input[type="range"]) */
+body.artifact-viewport input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: var(--border, #e7e7db);
+    border-radius: 99px;
+    outline: none;
+    margin: 10px 0;
+    cursor: pointer;
+}
+
+/* Chrome, Safari, Opera, Edge */
+body.artifact-viewport input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid var(--primary, #ff5400);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.1s, background-color 0.1s;
+}
+
+body.artifact-viewport input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+    background: var(--primary, #ff5400);
+    border-color: #ffffff;
+}
+
+body.artifact-viewport input[type="range"]::-webkit-slider-thumb:active {
+    transform: scale(0.95);
+}
+
+/* Firefox */
+body.artifact-viewport input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid var(--primary, #ff5400);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.1s, background-color 0.1s;
+}
+
+body.artifact-viewport input[type="range"]::-moz-range-thumb:hover {
+    transform: scale(1.15);
+    background: var(--primary, #ff5400);
+    border-color: #ffffff;
+}
+
+/* 4. Checkbox & Radio Buttons */
+body.artifact-viewport input[type="checkbox"]:not(.toggle-switch),
+body.artifact-viewport input[type="radio"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--border, #ddd);
+    background-color: var(--card-bg, #ffffff);
+    outline: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin-right: 6px;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+body.artifact-viewport input[type="checkbox"]:not(.toggle-switch) {
+    border-radius: 4px;
+}
+
+body.artifact-viewport input[type="radio"] {
+    border-radius: 50%;
+}
+
+body.artifact-viewport input[type="checkbox"]:not(.toggle-switch):checked {
+    background-color: var(--primary, #ff5400);
+    border-color: var(--primary, #ff5400);
+}
+
+body.artifact-viewport input[type="checkbox"]:not(.toggle-switch):checked::after {
+    content: "✓";
+    font-size: 11px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+body.artifact-viewport input[type="radio"]:checked {
+    border-color: var(--primary, #ff5400);
+}
+
+body.artifact-viewport input[type="radio"]:checked::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    background-color: var(--primary, #ff5400);
+    border-radius: 50%;
+    display: block;
+}
+
+/* Toggle Switch class */
+body.artifact-viewport input[type="checkbox"].toggle-switch {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 36px;
+    height: 20px;
+    border-radius: 99px;
+    background-color: var(--border, #e7e7db);
+    position: relative;
+    outline: none;
+    cursor: pointer;
+    vertical-align: middle;
+    margin-right: 6px;
+    transition: background-color 0.2s;
+}
+
+body.artifact-viewport input[type="checkbox"].toggle-switch:checked {
+    background-color: var(--primary, #ff5400);
+}
+
+body.artifact-viewport input[type="checkbox"].toggle-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: transform 0.2s;
+}
+
+body.artifact-viewport input[type="checkbox"].toggle-switch:checked::after {
+    transform: translateX(16px);
+}
+
+/* 5. Buttons */
+body.artifact-viewport button,
+body.artifact-viewport .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 14px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 13px;
+    border-radius: var(--squircle-inner, 8px);
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
+    background-color: var(--primary, #ff5400);
+    color: #ffffff;
+    outline: none;
+}
+
+body.artifact-viewport button:hover,
+body.artifact-viewport .btn:hover {
+    background-color: #e04a00;
+}
+
+body.artifact-viewport button:active,
+body.artifact-viewport .btn:active {
+    transform: scale(0.98);
+}
+
+body.artifact-viewport button:focus,
+body.artifact-viewport .btn:focus {
+    box-shadow: 0 0 0 2px rgba(255, 84, 0, 0.35);
+}
+
+body.artifact-viewport button.btn-secondary,
+body.artifact-viewport .btn-secondary {
+    background-color: transparent;
+    border: 1px solid var(--border, #ddd);
+    color: var(--text, #000000);
+}
+
+body.artifact-viewport button.btn-secondary:hover,
+body.artifact-viewport .btn-secondary:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+}
+
+body.artifact-viewport.dark-mode button.btn-secondary:hover,
+body.artifact-viewport.dark-mode .btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+body.artifact-viewport button.btn-success,
+body.artifact-viewport .btn-success {
+    background-color: #10b981;
+}
+body.artifact-viewport button.btn-success:hover,
+body.artifact-viewport .btn-success:hover {
+    background-color: #059669;
+}
+
+body.artifact-viewport button.btn-danger,
+body.artifact-viewport .btn-danger {
+    background-color: #ef4444;
+}
+body.artifact-viewport button.btn-danger:hover,
+body.artifact-viewport .btn-danger:hover {
+    background-color: #dc2626;
+}
+
+body.artifact-viewport button:disabled,
+body.artifact-viewport .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* 6. Layout & Grid Utilities */
+.flex-row { display: flex; flex-direction: row; }
+.flex-col { display: flex; flex-direction: column; }
+.flex-wrap { display: flex; flex-wrap: wrap; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+
+.grid-cols-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.grid-cols-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.grid-cols-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.grid-cols-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+
+/* 7. Panels & Containers */
+.card, .panel {
+    background-color: var(--card-bg, #ffffff);
+    border: 1px solid var(--border, #ddd);
+    border-radius: var(--squircle-inner, 8px);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.output-box {
+    background-color: var(--border, #e7e7db);
+    border-radius: var(--squircle-inner, 8px);
+    padding: 12px;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    letter-spacing: 0.5px;
+    word-break: break-all;
+    white-space: pre-wrap;
+    opacity: 0.9;
+}
+
+body.dark-mode .output-box {
+    background-color: #2b2b2a;
+    color: #eff0eb;
+}
+
+/* Warning & Alerts */
+.alert {
+    border-radius: var(--squircle-inner, 8px);
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+
+.alert-note {
+    background: rgba(153, 153, 134, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(153, 153, 134, 0.3);
+    color: var(--text);
+}
+
+.alert-tip {
+    background: rgba(26, 127, 55, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(26, 127, 55, 0.2);
+    color: #0d4a20;
+}
+
+body.dark-mode .alert-tip {
+    background: rgba(63, 185, 80, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(63, 185, 80, 0.3);
+    color: #7dbf83;
+}
+
+.alert-warning {
+    background: rgba(154, 103, 0, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(154, 103, 0, 0.2);
+    color: #634300;
+}
+
+body.dark-mode .alert-warning {
+    background: rgba(210, 153, 34, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(210, 153, 34, 0.3);
+    color: #d1b15c;
+}
+
+.alert-caution {
+    background: rgba(200, 30, 30, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(200, 30, 30, 0.2);
+    color: #991b1b;
+}
+
+body.dark-mode .alert-caution {
+    background: rgba(248, 113, 113, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.3);
+    color: #f87171;
+}
+
+/* 8. Data Tables */
+.table-container {
+    overflow-x: auto;
+    border-radius: var(--squircle-inner, 8px);
+    border: 1px solid var(--border, #ddd);
+    margin-bottom: 12px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background-color: var(--card-bg, #ffffff);
+}
+
+.data-table th,
+.data-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border, #ddd);
+}
+
+.data-table th {
+    font-weight: 600;
+    background-color: rgba(0, 0, 0, 0.02);
+    color: var(--text);
+}
+
+body.dark-mode .data-table th {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tr:hover {
+    background-color: rgba(0, 0, 0, 0.01);
+}
+
+body.dark-mode .data-table tr:hover {
+    background-color: rgba(255, 255, 255, 0.01);
+}
+
+/* 9. Specialized Cipher & Visual components */
+
+/* Flow Nodes (used for Symmetric Cipher Models) */
+.flow-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.flow-node {
+    background-color: var(--card-bg, #ffffff);
+    border: 2px solid var(--border, #d4d4d8);
+    border-radius: var(--squircle-inner, 8px);
+    padding: 12px 14px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 13.5px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    min-width: 110px;
+    color: var(--text);
+}
+
+.flow-node:hover,
+.flow-node.active {
+    border-color: var(--primary, #ff5400);
+    background-color: rgba(255, 84, 0, 0.05);
+    color: var(--primary, #ff5400);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(255, 84, 0, 0.15);
+}
+
+.flow-arrow {
+    font-size: 18px;
+    color: var(--border, #a1a1aa);
+    font-weight: bold;
+    user-select: none;
+}
+
+/* Matrix Inputs (for Hill Ciphers) */
+.matrix-grid {
+    display: inline-grid;
+    grid-template-columns: repeat(2, 45px);
+    gap: 6px;
+    vertical-align: middle;
+    border-left: 2px solid var(--text);
+    border-right: 2px solid var(--text);
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+.matrix-grid-3 {
+    grid-template-columns: repeat(3, 45px);
+}
+
+.matrix-input {
+    width: 100% !important;
+    height: 32px !important;
+    padding: 4px !important;
+    text-align: center;
+    font-family: monospace;
+    font-size: 13px !important;
+}
+
+/* Letter grid / row display (for Monoalphabetic or Transposition rows) */
+.letter-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.letter-cell {
+    width: 26px;
+    height: 26px;
+    background-color: var(--card-bg, #ffffff);
+    border: 1px solid var(--border, #ddd);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: var(--text);
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.letter-cell.highlight {
+    background-color: rgba(255, 84, 0, 0.1);
+    border-color: var(--primary, #ff5400);
+    color: var(--primary, #ff5400);
+}
+
+/* Tabs System */
+.tab-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border, #ddd);
+    padding-bottom: 6px;
+}
+
+.tab-item {
+    padding: 6px 12px;
+    border-radius: var(--squircle-inner, 8px) var(--squircle-inner, 8px) 0 0;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    opacity: 0.75;
+    transition: all 0.2s;
+}
+
+.tab-item:hover {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+body.dark-mode .tab-item:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.tab-item.active {
+    opacity: 1;
+    color: var(--primary, #ff5400);
+    border-color: var(--border, #ddd) var(--border, #ddd) transparent var(--border, #ddd);
+    background-color: var(--card-bg, #ffffff);
+}

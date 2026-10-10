@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "insightroom-server": {
+      "type": "http",
+      "url": "https://admin.getmaterio.app/mcp"
+    }
+  }
+}

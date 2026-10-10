@@ -14,7 +14,8 @@
     UserAdd01Icon,
     ShieldAlertIcon,
     Globe02Icon,
-    UserIcon
+    UserIcon,
+    Edit02Icon
   } from '@hugeicons/core-free-icons';
   import { onMount } from 'svelte';
   import { userStore } from '$lib/stores/user.svelte';
@@ -81,6 +82,7 @@
 
   const adminNav = [
     { name: 'Overview', href: '/admin/overview', icon: DashboardSquare01Icon },
+    { name: 'Writer', href: '/admin/writer', icon: Edit02Icon },
     { name: 'Uploads', href: '/admin/uploads', icon: Upload01Icon },
     { name: 'File Management', href: '/admin/files', icon: Folder01Icon },
     { name: 'Promotions', href: '/admin/promotions', icon: Megaphone01Icon },

@@ -1,0 +1,433 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Insightroom REST API",
+    "description": "Stateless REST API to manage posts and upload assets for the Insightroom. Authenticates with a Materio ID Bearer token (session JWT or OAuth access token from auth.getmaterio.app).",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://room.getmaterio.app"
+    }
+  ],
+  "paths": {
+    "/api/posts": {
+      "get": {
+        "summary": "List posts",
+        "description": "Retrieve a list of published posts with search query filters.",
+        "operationId": "listPosts",
+        "parameters": [
+          {
+            "name": "num",
+            "in": "query",
+            "description": "Limit the number of returned posts",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "description": "Filter posts by subject",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "semester",
+            "in": "query",
+            "description": "Filter posts by academic semester",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful retrieval of posts list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PostExcerpt"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/posts": {
+      "post": {
+        "summary": "Publish (Create) or Update Post",
+        "description": "Publish a new post to the database or update an existing post. Leave the id field blank or set it to 'new' to publish a new post.",
+        "operationId": "publishPost",
+        "security": [
+          {
+            "OAuth2": [
+              "admin"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePostRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Post saved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden: Requires Admin privileges",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Post",
+        "description": "Permanently delete a post and its versions using its ObjectId.",
+        "operationId": "deletePost",
+        "security": [
+          {
+            "OAuth2": [
+              "admin"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "The ObjectId of the post to delete",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/upload": {
+      "post": {
+        "summary": "Upload Asset Image",
+        "description": "Upload a cover image or layout asset. Automatically processes via Cloudinary if configured.",
+        "operationId": "uploadImage",
+        "security": [
+          {
+            "OAuth2": [
+              "admin"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "The image file binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "description": "The public image URL or base64 data URI (data:image/...;base64,...). Optional if filePath is provided."
+                  },
+                  "filePath": {
+                    "type": "string",
+                    "description": "The local filesystem path or resolved file URL of the image. Optional if image is provided."
+                  },
+                  "filename": {
+                    "type": "string",
+                    "description": "The preferred filename (optional)"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Image uploaded successfully",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "The secure Cloudinary or local asset URL"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "No file uploaded",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Error"
+              }
+            }
+          }
+        },
+        "401": {
+          "description": "Unauthorized",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Error"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/outline": {
+      "post": {
+        "summary": "Retrieve writing guidelines and outline",
+        "description": "Retrieve the proprietary style guidelines and instructions to write or outline content for a specific topic. You must refer to the outline skill for detailed instructions before proceeding.",
+        "operationId": "getOutline",
+        "security": [
+          {
+            "OAuth2": [
+              "admin"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutlineRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful retrieval of guidelines and outline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutlineResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request: Topic is missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden: Requires Admin privileges",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "OAuth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://room.getmaterio.app/authorize",
+            "tokenUrl": "https://room.getmaterio.app/token",
+            "scopes": {
+              "admin": "Full admin access to create, update, and delete posts"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "PostExcerpt": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "excerpt": { "type": "string" },
+          "date": { "type": "string" },
+          "category": { "type": "string" },
+          "categorySlug": { "type": "string" },
+          "imgUrl": { "type": ["string", "null"] },
+          "link": { "type": "string" },
+          "subject": { "type": ["string", "null"] },
+          "semester": { "type": ["string", "null"] },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "visibility": { "type": ["string", "null"] }
+        }
+      },
+      "SavePostRequest": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "slug": { "type": "string" },
+          "content": { "type": "string" },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "excerpt": { "type": "string" },
+              "date": { "type": "string" },
+              "category": { "type": "string" },
+              "visibility": { "type": "string", "enum": ["public", "private"] },
+              "draft": { "type": "boolean" },
+              "hidden": { "type": "boolean" },
+              "image": { "type": "string" },
+              "author_name": { "type": "string" },
+              "author_avatar": { "type": "string" }
+            }
+          },
+          "saved_by_name": { "type": "string" },
+          "saved_by_display_name": { "type": "string" },
+          "saved_by_avatar": { "type": "string" }
+        },
+        "required": ["title"]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        },
+        "required": ["error"]
+      },
+      "OutlineRequest": {
+        "type": "object",
+        "properties": {
+          "topic": { "type": "string" }
+        },
+        "required": ["topic"]
+      },
+      "OutlineResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "outline": { "type": "string" }
+        },
+        "required": ["success", "outline"]
+      }
+    }
+  }
+}

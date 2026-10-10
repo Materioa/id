@@ -31,6 +31,22 @@
   let isSuspended = $state(false);
   let suspensionReason = $state('');
 
+  function isLegacySuspensionReason(reason?: string): boolean {
+    if (!reason) return true;
+    const trimmed = reason.trim();
+    if (!trimmed) return true;
+    if (/^(your\s+(materio\s+id|account)|access\b|this\s+(materio\s+id|account)|we\s+have|you\s+have)/i.test(trimmed)) {
+      return false;
+    }
+    if (trimmed.length > 45 && /[.!?]$/.test(trimmed)) {
+      return false;
+    }
+    if ((trimmed.toLowerCase().includes('suspended') || trimmed.toLowerCase().includes('revoked')) && !/^violat/i.test(trimmed)) {
+      return false;
+    }
+    return true;
+  }
+
   // Theme states
   let theme = $state('system'); // 'light', 'dark', 'system'
 
@@ -191,8 +207,12 @@
   }
 
   function handleLogout() {
+    // Make sure the shared cookie carries this tab's token, then let auth's
+    // /logout page revoke the server-side session and clear the cookie.
+    // (Clearing it here first left the user_sessions row orphaned.)
+    const token = localStorage.getItem('token');
+    if (token && !getClientCookie('materio_token')) setClientCookie('materio_token', token);
     userStore.logout();
-    clearClientCookie('materio_token');
     const appUrls = getAppUrls(window.location.origin);
     window.location.href = `${appUrls.auth}/logout?callback=${encodeURIComponent(window.location.origin)}`;
   }
@@ -217,9 +237,15 @@
         <h1 class="text-2xl font-serif font-normal tracking-tight text-foreground">
           Materio ID Suspended
         </h1>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          Your Materio ID has been suspended for <span class="font-medium text-foreground">{suspensionReason}</span> and thereby access has been revoked.
-        </p>
+        {#if isLegacySuspensionReason(suspensionReason)}
+          <p class="text-sm text-muted-foreground leading-relaxed">
+            Your Materio ID has been suspended for <span class="font-medium text-foreground">{suspensionReason || 'violating our policies'}</span> and thereby access has been revoked.
+          </p>
+        {:else}
+          <p class="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+            {suspensionReason}
+          </p>
+        {/if}
       </div>
 
       <div class="flex items-center justify-center gap-3 pt-2">
@@ -289,10 +315,10 @@
               <a 
                 href={item.href} 
                 onclick={closeMobileMenu}
-                class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 {isRouteActive(item.href) ? 'bg-card shadow-xs font-medium text-foreground border border-border/80' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'} {(isCollapsed && !isMobileMenuOpen) ? 'md:justify-center' : ''}"
+                class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150 {isRouteActive(item.href) ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'} {(isCollapsed && !isMobileMenuOpen) ? 'md:justify-center' : ''}"
                 title={item.name}
               >
-                <HugeiconsIcon icon={item.icon} size={16} class="shrink-0 {isRouteActive(item.href) ? 'text-primary' : 'text-muted-foreground'}" />
+                <HugeiconsIcon icon={item.icon} size={16} class="shrink-0 transition-colors {isRouteActive(item.href) ? 'text-primary' : 'text-muted-foreground'}" />
                 {#if !(isCollapsed && !isMobileMenuOpen)}
                   <span class="truncate">{item.name}</span>
                 {/if}

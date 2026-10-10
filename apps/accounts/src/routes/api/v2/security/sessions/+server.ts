@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { supabaseAdmin, verifyToken } from '$lib/server/utils';
+import { supabaseAdmin, verifyToken, pruneExpiredSessions } from '$lib/server/utils';
+import { sessionExpiresAt } from '@materio/config/session';
 
 export async function GET({ request }) {
   try {
@@ -10,18 +11,27 @@ export async function GET({ request }) {
     const decoded = await verifyToken(token);
     if (!decoded) return json({ error: 'Invalid token' }, { status: 401 });
 
+    // Drop sessions whose tokens can no longer be used, so the list only
+    // shows logins that are actually still alive.
+    await pruneExpiredSessions(decoded.id).catch((e) => console.error('Session prune failed:', e));
+
     const { data: sessions, error } = await supabaseAdmin
       .from('user_sessions')
       .select('id, user_agent, ip_address, created_at, last_active_at')
       .eq('user_id', decoded.id)
-      .order('last_active_at', { ascending: false });
+      .order('last_active_at', { ascending: false, nullsFirst: false });
 
     if (error) {
       console.error('Error fetching sessions:', error);
       return json({ error: 'Database error' }, { status: 500 });
     }
     
-    return json({ sessions, currentSessionId: decoded.jti });
+    const withExpiry = (sessions || []).map((s) => ({
+      ...s,
+      expires_at: sessionExpiresAt(s)?.toISOString() ?? null
+    }));
+
+    return json({ sessions: withExpiry, currentSessionId: decoded.jti });
   } catch (err: any) {
     console.error('Sessions API Error:', err);
     return json({ error: 'Internal server error' }, { status: 500 });

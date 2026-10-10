@@ -9,9 +9,17 @@ export type Toast = {
 
 export const toasts = writable<Toast[]>([]);
 
-export function addToast(message: string, type: Toast['type'] = 'info', title?: string) {
+export function addToast(
+  messageOrObj: string | { message: string; type?: Toast['type']; title?: string },
+  type: Toast['type'] = 'info',
+  title?: string
+) {
   const id = Date.now();
-  toasts.update(all => [...all, { id, type, message, title }]);
+  if (typeof messageOrObj === 'object') {
+    toasts.update(all => [...all, { id, type: messageOrObj.type || 'info', message: messageOrObj.message, title: messageOrObj.title }]);
+  } else {
+    toasts.update(all => [...all, { id, type, message: messageOrObj, title }]);
+  }
   setTimeout(() => removeToast(id), 4000);
 }
 

@@ -6,10 +6,44 @@
   import { runPreviewMagic } from '$lib/utils/magicPreview';
   import { addToast } from '$lib/stores/toast';
   import { HugeiconsIcon } from '@hugeicons/svelte';
-  import { Folder01Icon, Add01Icon, Delete01Icon, Edit01Icon, SaveIcon, RefreshIcon, ViewIcon, CheckmarkCircle01Icon, Comment01Icon, Mail01Icon, Tick01Icon } from '@hugeicons/core-free-icons';
+  import { MagicWand01Icon, Add01Icon, Delete01Icon, Edit01Icon, SaveIcon, RefreshIcon, ViewIcon, CheckmarkCircle01Icon, Comment01Icon, Mail01Icon, Tick01Icon, LowSignalIcon, MediumSignalIcon, FullSignalIcon } from '@hugeicons/core-free-icons';
+  import { Sparkles, Bot, Send, Copy, Check, MessageSquare, User, Mail, RefreshCw } from 'lucide-svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import Dropdown from '$lib/components/Dropdown.svelte';
+
+  function getCookie(name: string): string | null {
+    if (typeof document === 'undefined') return null;
+    const cookies = document.cookie ? document.cookie.split('; ') : [];
+    for (const c of cookies) {
+      const [k, ...v] = c.split('=');
+      if (k.trim() === name) return decodeURIComponent(v.join('='));
+    }
+    return null;
+  }
+
+  function setCookie(name: string, value: string) {
+    if (typeof document === 'undefined') return;
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`;
+  }
+
+  function getPriorityInfo(item: any): { level: 'high' | 'medium' | 'low'; label: string; icon: any; colorClass: string } | null {
+    if (!item) return null;
+    const raw = item.raw || item;
+    const sev = String(raw?.severity || '').toLowerCase();
+    const isImp = Boolean(raw?.isImportant);
+
+    if (sev === 'critical' || isImp) {
+      return { level: 'high', label: 'High Priority', icon: FullSignalIcon, colorClass: 'text-red-500' };
+    }
+    if (sev === 'major') {
+      return { level: 'medium', label: 'Medium Priority', icon: MediumSignalIcon, colorClass: 'text-amber-500' };
+    }
+    if (sev === 'minor' || sev === 'cosmetic' || item.source === 'bug' || raw?.affectedArea) {
+      return { level: 'low', label: 'Low Priority', icon: LowSignalIcon, colorClass: 'text-emerald-500' };
+    }
+    return null;
+  }
 
   type Field = { name: string; label: string; type: string; required?: boolean; options?: any[]; placeholder?: string; hint?: string; minLength?: number; maxLength?: number; accept?: string };
   type Step = { id: string; type: string; title: string; subtitle?: string; content?: string[]; description?: string };
@@ -24,12 +58,19 @@
     magicJs?: string; magicEnabled?: boolean; trackingId?: string; trackViews?: boolean;
     updatedAt?: string;
   };
-  type Response = { id: string; formId: string; kind?: string; sessionId?: string; userId?: string; username?: string; userEmail?: string; values?: Record<string, string>; skipped?: string[]; status?: string; reviewed?: boolean; examContext?: any; updatedAt?: string };
+  type Response = { id: string; formId: string; kind?: string; sessionId?: string; userId?: string; username?: string; userEmail?: string; values?: Record<string, string>; skipped?: string[]; status?: string; reviewed?: boolean; examContext?: any; caseNumber?: string; updatedAt?: string };
   type Session = { id: string; sessionId?: string; formId: string; status?: string; messages?: { role: string; content: string }[]; extracted?: Record<string, string>; updatedAt?: string };
   type Row = { key: string; source: 'chat' | 'popup' | 'bug'; id: string; formId: string; excerpt: string; status: string; reviewed: boolean; email: string; date: string; answers: [string, string][]; skipped: string[]; files: any[]; who: [string, string][]; raw: any };
-  const REVIEW_STATUS = ['Reviewed', 'Uploaded', 'Invalid', 'Duplicate', 'Needs reply'];
-  const FRESH_STATUS = ['pending', 'open', 'completed', 'done', 'in_progress', ''];
-  function isFresh(r: { reviewed: boolean; status: string }) { return !r.reviewed && FRESH_STATUS.includes(r.status || ''); }
+  const REVIEW_STATUS = ['Reviewed', 'Replied', 'Uploaded', 'Invalid', 'Duplicate', 'Needs reply'];
+  const bulkStatusOptions = REVIEW_STATUS.map((s) => ({ value: s, label: s }));
+  let bulkSelectedStatus = $state('');
+  const HANDLED_STATUSES = ['reviewed', 'replied', 'resolved', 'closed', 'invalid', 'duplicate'];
+  function isFresh(r: { reviewed?: boolean; status?: string }) {
+    if (r.reviewed) return false;
+    const s = String(r.status || '').toLowerCase().trim();
+    if (HANDLED_STATUSES.includes(s)) return false;
+    return true;
+  }
   type Rule = { id: string; enabled: boolean; formId: string; trigger: { type: string; delay: number; conditions: { minVisits: number; minDaysSinceFirstVisit: number; pages: string[]; excludePages: string[]; userType: string } }; frequency: string; customFrequencyHours: any; showOn: string; startDate: any; endDate: any; priority: number };
 
   let docs = $state<Doc[]>([]);
@@ -60,6 +101,44 @@
   let detailOpen = $state(false);
   let previewDoc = $state<Doc | null>(null);
   let previewOpen = $state(false);
+
+  // Bulk selection for answers
+  let selectedAnswerKeys = $state<string[]>([]);
+  let confirmBulkDeleteOpen = $state(false);
+  let isBulkProcessing = $state(false);
+
+  // Direct in-modal email sender
+  let directEmailOpen = $state(false);
+  let directEmailSubject = $state('');
+  let directEmailBody = $state('');
+  let directSenderEmail = $state('support@getmaterio.app');
+  let directEmailMarkReviewed = $state(true);
+  let isSendingDirectEmail = $state(false);
+
+  // Full-Blown Support Ticketing & Thread System State
+  let supportModalOpen = $state(false);
+  let activeTicketRow = $state<Row | null>(null);
+  let threadLoading = $state(false);
+  let threadMessages = $state<any[]>([]);
+  let activeCaseNumber = $state<string>('');
+  let ticketStatus = $state<string>('open');
+  let isCustomTicketStatus = $state<boolean>(false);
+  let isSavingTicketStatus = $state<boolean>(false);
+  let ticketAssignedTo = $state<string>('');
+  let ticketIsImportant = $state<boolean>(false);
+  let ticketReplySubject = $state<string>('');
+  let ticketReplyBody = $state<string>('');
+  let isSendingTicketReply = $state<boolean>(false);
+  let isDraftingAi = $state<boolean>(false);
+  let isEnhancingAi = $state<boolean>(false);
+  let aiProviderChoice = $state<'auto' | 'google-ai' | 'nvidia-nim'>('auto');
+  let forwardOption = $state<string>('none');
+  let customForwardEmail = $state<string>('');
+  let isBatchTriageLoading = $state<boolean>(false);
+  let isSingleTriageLoading = $state<boolean>(false);
+  let copiedCaseNumber = $state<boolean>(false);
+  let confirmDiscardCaseOpen = $state<boolean>(false);
+  let isDiscardingCase = $state<boolean>(false);
 
   // Live Magic preview (magic tab): re-runs the author's code against the
   // mock below as they type, so effects show here before anything is saved.
@@ -111,14 +190,47 @@
       bugs = data.bugs || [];
       templates = (data.templates || []).map((t: any) => ({ ...t, kind: normKind(t) }));
       if (data.activity) activity = { enabled: data.activity.enabled !== false, activities: data.activity.activities || [], settings: data.activity.settings || {} };
-      if (!selectedSection) {
+      const savedSec = getCookie('admin_forms_section');
+      const savedExists = savedSec && (
+        docs.some((d) => d.id === savedSec) ||
+        responses.some((r) => r.formId === savedSec) ||
+        submissions.some((s) => s.formType === savedSec) ||
+        (savedSec === 'bug-report' && bugs.length > 0)
+      );
+
+      if (savedExists) {
+        selectedSection = savedSec;
+      } else if (!selectedSection) {
         const first = docs.find((d) => responses.some((r) => r.formId === d.id) || submissions.some((s) => s.formType === d.id))?.id;
         selectedSection = first || (bugs.length ? 'bug-report' : '');
       }
     } catch (e: any) { addToast(e.message || 'Unable to load', 'error'); }
     finally { isLoading = false; }
   }
-  onMount(load);
+
+  onMount(() => {
+    const savedTab = getCookie('admin_forms_tab');
+    if (savedTab === 'popups' || savedTab === 'interviews' || savedTab === 'responses') {
+      activeTab = savedTab;
+    }
+    const savedSec = getCookie('admin_forms_section');
+    if (savedSec) {
+      selectedSection = savedSec;
+    }
+    load();
+  });
+
+  $effect(() => {
+    if (typeof document !== 'undefined' && activeTab) {
+      setCookie('admin_forms_tab', activeTab);
+    }
+  });
+
+  $effect(() => {
+    if (typeof document !== 'undefined' && selectedSection) {
+      setCookie('admin_forms_section', selectedSection);
+    }
+  });
 
   let wantKind = $derived(activeTab === 'interviews' ? 'interview' : 'popup');
   let visibleDocs = $derived.by(() => docs.filter((d) => {
@@ -156,8 +268,11 @@
     }
     for (const b of bugs) {
       const who: [string, string][] = [];
+      const hasEmail = Boolean(b.email && String(b.email).trim() && String(b.email).includes('@'));
+      if (b.caseNumber && hasEmail) who.push(['Case #', String(b.caseNumber)]);
+      if (b.assignedTo) who.push(['Assigned', String(b.assignedTo)]);
       if (b.meta?.sessionId) who.push(['Session', String(b.meta.sessionId)]);
-      rows.push({ key: `bug-${b.id}`, source: 'bug', id: b.id, formId: 'bug-report', excerpt: b.title ? `Title: ${b.title}`.slice(0, 120) : 'No answers yet', status: b.status || 'open', reviewed: b.reviewed === true, email: String(b.email || ''), date: b.reportedAt || '', answers: [['Severity', String(b.severity || '')], ['Area', String(b.affectedArea || '')], ['What happened', String(b.description || '')], ['Steps', String(b.stepsToReproduce || '—')]], skipped: [], files: [], who, raw: b });
+      rows.push({ key: `bug-${b.id}`, source: 'bug', id: b.id, formId: 'bug-report', excerpt: b.title ? `Title: ${b.title}`.slice(0, 120) : 'No answers yet', status: b.status || 'open', reviewed: b.reviewed === true, email: String(b.email || ''), date: b.reportedAt || '', answers: [['Title', String(b.title || '')], ['Severity', String(b.severity || '')], ['Area', String(b.affectedArea || '')], ['What happened', String(b.description || '')], ['Steps', String(b.stepsToReproduce || '—')]], skipped: [], files: [], who, raw: b });
     }
     return rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   });
@@ -173,7 +288,7 @@
       const mine = allRows.filter((r) => r.formId === id);
       const doc = docs.find((d) => d.id === id);
       const kind = doc ? (doc.kind === 'popup' ? 'Pop-up' : 'Chat') : (mine[0]?.source === 'bug' ? 'Bug report' : mine[0]?.source === 'chat' ? 'Chat' : 'Pop-up');
-      return { id, title: docTitle(id), kind, total: mine.length, fresh: mine.filter((r) => !r.reviewed).length, rows: mine.filter((r) => !filesOnly || r.files.length > 0) };
+      return { id, title: docTitle(id), kind, total: mine.length, fresh: mine.filter((r) => isFresh(r)).length, rows: mine.filter((r) => !filesOnly || r.files.length > 0) };
     }).filter((s) => s.total > 0);
   });
   let newCounts = $derived.by(() => {
@@ -318,6 +433,439 @@
     } catch (e: any) { addToast(e.message || 'Unable to update', 'error'); }
   }
 
+  let allVisibleSelected = $derived(
+    visibleSectionRows.length > 0 &&
+    visibleSectionRows.every((r) => selectedAnswerKeys.includes(r.key))
+  );
+
+  function toggleSelectAllVisible() {
+    if (allVisibleSelected) {
+      const visibleKeys = new Set(visibleSectionRows.map((r) => r.key));
+      selectedAnswerKeys = selectedAnswerKeys.filter((k) => !visibleKeys.has(k));
+    } else {
+      const toAdd = visibleSectionRows.map((r) => r.key);
+      selectedAnswerKeys = Array.from(new Set([...selectedAnswerKeys, ...toAdd]));
+    }
+  }
+
+  function toggleSelectRow(key: string) {
+    if (selectedAnswerKeys.includes(key)) {
+      selectedAnswerKeys = selectedAnswerKeys.filter((k) => k !== key);
+    } else {
+      selectedAnswerKeys = [...selectedAnswerKeys, key];
+    }
+  }
+
+  async function applyBulkStatus(status = 'Reviewed') {
+    const selectedRows = allRows.filter((r) => selectedAnswerKeys.includes(r.key));
+    if (!selectedRows.length) return;
+    isBulkProcessing = true;
+    try {
+      const map = { chat: 'responses', popup: 'submissions', bug: 'bugs' } as const;
+      const items = selectedRows.map((r) => ({ source: map[r.source], id: r.id }));
+      await makeAdminRequest('forms', 'PATCH', { bulkReview: { items, status } });
+      const stamp = { status, reviewed: true, reviewedAt: new Date().toISOString() };
+      for (const row of selectedRows) {
+        if (row.source === 'chat') {
+          const it: any = responses.find((x: any) => x.id === row.id);
+          if (it) Object.assign(it, stamp);
+        } else if (row.source === 'popup') {
+          const it: any = submissions.find((x: any) => x.id === row.id);
+          if (it) Object.assign(it, stamp);
+        } else {
+          const it: any = bugs.find((x: any) => x.id === row.id);
+          if (it) Object.assign(it, stamp);
+        }
+      }
+      responses = [...responses];
+      submissions = [...submissions];
+      bugs = [...bugs];
+      addToast(`${selectedRows.length} answers marked as ${status.toLowerCase()}`, 'success');
+      selectedAnswerKeys = [];
+    } catch (e: any) {
+      addToast(e.message || 'Unable to update status', 'error');
+    } finally {
+      isBulkProcessing = false;
+      bulkSelectedStatus = '';
+    }
+  }
+
+  async function confirmBulkDelete() {
+    const selectedRows = allRows.filter((r) => selectedAnswerKeys.includes(r.key));
+    if (!selectedRows.length) return;
+    isBulkProcessing = true;
+    try {
+      const map = { chat: 'responses', popup: 'submissions', bug: 'bugs' } as const;
+      const bulkDelete = selectedRows.map((r) => ({ source: map[r.source], id: r.id }));
+      await makeAdminRequest('forms', 'DELETE', { bulkDelete });
+      const chatIds = new Set(selectedRows.filter((r) => r.source === 'chat').map((r) => r.id));
+      const popupIds = new Set(selectedRows.filter((r) => r.source === 'popup').map((r) => r.id));
+      const bugIds = new Set(selectedRows.filter((r) => r.source === 'bug').map((r) => r.id));
+      responses = responses.filter((x: any) => !chatIds.has(x.id));
+      submissions = submissions.filter((x: any) => !popupIds.has(x.id));
+      bugs = bugs.filter((x: any) => !bugIds.has(x.id));
+      addToast(`${selectedRows.length} answers deleted`, 'success');
+      selectedAnswerKeys = [];
+      confirmBulkDeleteOpen = false;
+    } catch (e: any) {
+      addToast(e.message || 'Unable to delete answers', 'error');
+    } finally {
+      isBulkProcessing = false;
+    }
+  }
+
+  const TICKET_STATUS_OPTIONS = [
+    { value: 'open', label: 'Open' },
+    { value: 'Replied', label: 'Replied' },
+    { value: 'In Progress', label: 'In Progress' },
+    { value: 'Waiting on Customer', label: 'Waiting on Customer' },
+    { value: 'Resolved', label: 'Resolved' },
+    { value: 'Closed', label: 'Closed' },
+    { value: '__custom__', label: 'Custom status...' }
+  ];
+
+  function normalizeTicketStatus(s: string): string {
+    const raw = (s || '').trim();
+    const lower = raw.toLowerCase().replace(/_/g, ' ');
+    if (lower === 'in progress') return 'In Progress';
+    if (lower === 'waiting customer' || lower === 'waiting on customer') return 'Waiting on Customer';
+    if (lower === 'replied') return 'Replied';
+    if (lower === 'resolved') return 'Resolved';
+    if (lower === 'closed') return 'Closed';
+    if (lower === 'open') return 'open';
+    if (lower === 'reviewed') return 'Reviewed';
+    return raw || 'open';
+  }
+
+  function getDropdownStatusValue(s: string): string {
+    const norm = normalizeTicketStatus(s);
+    const found = TICKET_STATUS_OPTIONS.find((o) => o.value.toLowerCase() === norm.toLowerCase());
+    return found ? found.value : '__custom__';
+  }
+
+  async function updateTicketStatus(newStatus: string) {
+    if (!activeTicketRow || !newStatus?.trim()) return;
+    const cleanStatus = newStatus.trim();
+    ticketStatus = cleanStatus;
+    if (activeTicketRow.raw) {
+      activeTicketRow.raw.status = cleanStatus;
+    }
+    activeTicketRow.status = cleanStatus;
+    isSavingTicketStatus = true;
+    try {
+      await markReviewed(activeTicketRow, cleanStatus);
+      if (activeCaseNumber) {
+        await makeAdminRequest('support/thread', 'PATCH', {
+          caseNumber: activeCaseNumber,
+          responseId: activeTicketRow.id,
+          status: cleanStatus
+        }).catch(() => {});
+      }
+    } finally {
+      isSavingTicketStatus = false;
+    }
+  }
+
+  function getResolvedForwardEmail(): string | null {
+    if (forwardOption === 'none') return null;
+    if (forwardOption === 'custom') {
+      const email = customForwardEmail.trim();
+      return email.includes('@') ? email : null;
+    }
+    return forwardOption;
+  }
+
+  function isTicketCategory(formId?: string, source?: string): boolean {
+    if (source === 'bug' || formId === 'bug-report') return true;
+    const fid = (formId || '').toLowerCase().trim();
+    if (fid.includes('bug') || fid.includes('feedback') || fid === 'satisfaction') return true;
+    const title = docTitle(formId || '').toLowerCase();
+    if (title.includes('bug') || title.includes('feedback')) return true;
+    return false;
+  }
+
+  async function enhanceTypedResponseWithAi() {
+    if (!activeTicketRow) return;
+    const current = ticketReplyBody.trim();
+    if (!current) {
+      addToast('Type a reply message first to enhance with AI', 'info');
+      return;
+    }
+    isEnhancingAi = true;
+    try {
+      const bodyWithoutCase = current.replace(/^Case Number:\s*\d+\s*/i, '').trim();
+      const res: any = await makeAdminRequest('support/draft', 'POST', {
+        thread: threadMessages,
+        caseNumber: activeCaseNumber,
+        reporterName: activeTicketRow.who.find((w) => w[0] === 'Name')?.[1],
+        reporterEmail: activeTicketRow.email,
+        instruction: `The support agent wrote this draft response: "${bodyWithoutCase}". Enhance and rewrite this response to be exceptionally clear, reassuring, polite, and professionally worded, while strictly preserving all facts, solutions, and context the agent provided. Keep it concise. Never shout uppercase words. Sign off with: Braun,\nMaterio Support`,
+        provider: 'auto'
+      });
+      if (res.draft) {
+        let cleanDraft = res.draft.replace(/^Case Number:\s*\d+\s*/i, '').trim();
+        ticketReplyBody = cleanDraft;
+        addToast('Response enhanced with AI!', 'success');
+      }
+    } catch (e: any) {
+      addToast(e.message || 'Failed to enhance response', 'error');
+    } finally {
+      isEnhancingAi = false;
+    }
+  }
+
+  async function openSupportThread(row: Row) {
+    const hasEmail = Boolean(row.email && row.email.trim() && row.email.includes('@'));
+    if (!isTicketCategory(row.formId, row.source) || !hasEmail) {
+      detailResponse = row;
+      statusSel = '';
+      customStatus = '';
+      directEmailOpen = false;
+      detailOpen = true;
+      return;
+    }
+    activeTicketRow = row;
+    activeCaseNumber = (hasEmail ? row.raw?.caseNumber : '') || '';
+    if (!activeCaseNumber && hasEmail) {
+      activeCaseNumber = String(Math.floor(10000000 + Math.random() * 90000000));
+      if (row.raw) row.raw.caseNumber = activeCaseNumber;
+    }
+    const curStatus = row.raw?.status || row.status || 'open';
+    ticketStatus = normalizeTicketStatus(curStatus);
+    isCustomTicketStatus = getDropdownStatusValue(ticketStatus) === '__custom__';
+    ticketAssignedTo = row.raw?.assignedTo || (row.raw?.isImportant ? 'jinansh@getmaterio.app' : 'support@getmaterio.app');
+    ticketIsImportant = row.raw?.isImportant || row.raw?.severity === 'critical' || row.raw?.severity === 'major';
+    ticketReplySubject = `[${activeCaseNumber}] Re: ${(row.raw?.title || 'Support Update').trim()}`;
+    ticketReplyBody = '';
+    forwardOption = ticketIsImportant ? 'jinansh@getmaterio.app' : 'none';
+    customForwardEmail = '';
+    threadMessages = [];
+    supportModalOpen = true;
+    await loadThread(row);
+  }
+
+  function openDirectEmail(row: Row) {
+    if (isTicketCategory(row.formId, row.source)) {
+      openSupportThread(row);
+    } else {
+      detailResponse = row;
+      statusSel = '';
+      customStatus = '';
+      directEmailOpen = false;
+      detailOpen = true;
+    }
+  }
+
+  async function loadThread(row: Row) {
+    threadLoading = true;
+    try {
+      const cNum = activeCaseNumber || row.raw?.caseNumber || '';
+      const data: any = await makeAdminRequest(`support/thread?responseId=${row.id}&email=${encodeURIComponent(row.email)}&caseNumber=${cNum}`, 'GET');
+      threadMessages = data.messages || [];
+      if (data.caseNumber) {
+        activeCaseNumber = data.caseNumber;
+        if (threadMessages.length > 0) {
+          const lastMsg = threadMessages[threadMessages.length - 1];
+          let cleanSubj = (lastMsg.subject || row.raw?.title || 'Support Update').trim();
+          cleanSubj = cleanSubj.replace(/\bRe:\s*/gi, '').replace(/\s+/g, ' ').trim();
+          if (data.caseNumber && !cleanSubj.includes(data.caseNumber)) {
+            ticketReplySubject = `Re: [Case Number: ${data.caseNumber}] ${cleanSubj}`;
+          } else {
+            ticketReplySubject = `Re: ${cleanSubj}`;
+          }
+        } else {
+          ticketReplySubject = `Re: [Case Number: ${data.caseNumber}] ${(row.raw?.title || 'Support Update').trim()}`;
+        }
+        if (row.raw) row.raw.caseNumber = data.caseNumber;
+      }
+      if (data.bug) {
+        if (data.bug.status) {
+          ticketStatus = normalizeTicketStatus(data.bug.status);
+          isCustomTicketStatus = getDropdownStatusValue(ticketStatus) === '__custom__';
+        }
+        ticketAssignedTo = data.bug.assignedTo || ticketAssignedTo;
+        ticketIsImportant = data.bug.isImportant ?? ticketIsImportant;
+        if (row.raw) {
+          row.raw.severity = data.bug.severity || row.raw.severity;
+          row.raw.isImportant = data.bug.isImportant ?? row.raw.isImportant;
+        }
+      }
+    } catch (e: any) {
+      addToast(e.message || 'Failed to load conversation thread', 'error');
+    } finally {
+      threadLoading = false;
+    }
+  }
+
+  async function sendTicketReply() {
+    if (!activeTicketRow || !activeTicketRow.email) {
+      addToast('Recipient email required', 'error');
+      return;
+    }
+    if (!ticketReplyBody.trim()) {
+      addToast('Please enter a reply message', 'error');
+      return;
+    }
+    isSendingTicketReply = true;
+    try {
+      let sendBody = ticketReplyBody.trim();
+      if (activeCaseNumber && !sendBody.toLowerCase().startsWith('case number:')) {
+        sendBody = `Case Number: ${activeCaseNumber}\n\n${sendBody}`;
+      }
+
+      const forwardTarget = getResolvedForwardEmail();
+      const res: any = await makeAdminRequest('support/reply', 'POST', {
+        caseNumber: activeCaseNumber,
+        responseId: activeTicketRow.id,
+        to: activeTicketRow.email,
+        subject: ticketReplySubject.trim(),
+        text: sendBody,
+        status: ticketStatus,
+        forwardTo: forwardTarget || undefined,
+        forwardToJinansh: forwardTarget === 'jinansh@getmaterio.app'
+      });
+      addToast('Reply sent successfully', 'success');
+      threadMessages = [
+        ...threadMessages,
+        {
+          id: res.id || String(Date.now()),
+          direction: 'sent',
+          from: 'Materio Support <support@getmaterio.app>',
+          to: activeTicketRow.email,
+          subject: ticketReplySubject.trim(),
+          text: sendBody,
+          isAiGenerated: false,
+          createdAt: new Date().toISOString()
+        }
+      ];
+      ticketReplyBody = '';
+      if (activeTicketRow.raw) activeTicketRow.raw.status = ticketStatus;
+      activeTicketRow.status = ticketStatus;
+      await updateTicketStatus(ticketStatus);
+    } catch (e: any) {
+      addToast(e.message || 'Failed to send reply', 'error');
+    } finally {
+      isSendingTicketReply = false;
+    }
+  }
+
+  async function draftWithAi(instruction?: string) {
+    if (!activeTicketRow) return;
+    isDraftingAi = true;
+    try {
+      const res: any = await makeAdminRequest('support/draft', 'POST', {
+        thread: threadMessages,
+        caseNumber: activeCaseNumber,
+        reporterName: activeTicketRow.who.find((w) => w[0] === 'Name')?.[1],
+        reporterEmail: activeTicketRow.email,
+        instruction,
+        provider: 'auto'
+      });
+      ticketReplyBody = res.draft;
+      addToast('Draft generated with AI', 'success');
+    } catch (e: any) {
+      addToast(e.message || 'Failed to generate AI draft', 'error');
+    } finally {
+      isDraftingAi = false;
+    }
+  }
+
+  async function triggerSingleTriage() {
+    if (!activeTicketRow) return;
+    isSingleTriageLoading = true;
+    try {
+      const res: any = await makeAdminRequest('support/auto-triage', 'POST', {
+        bugId: activeTicketRow.id,
+        force: true
+      });
+      if (res.caseNumber) {
+        activeCaseNumber = res.caseNumber;
+        if (activeTicketRow.raw) activeTicketRow.raw.caseNumber = res.caseNumber;
+      }
+      addToast('Automated AI reply dispatched to customer!', 'success');
+      await loadThread(activeTicketRow);
+      await load();
+    } catch (e: any) {
+      addToast(e.message || 'Auto-triage failed', 'error');
+    } finally {
+      isSingleTriageLoading = false;
+    }
+  }
+
+  async function triggerBatchTriage() {
+    isBatchTriageLoading = true;
+    try {
+      const res: any = await makeAdminRequest('support/auto-triage', 'POST', {});
+      addToast(`Processed ${res.processed || 0} pending bug reports with AI!`, 'success');
+      await load();
+    } catch (e: any) {
+      addToast(e.message || 'Batch triage failed', 'error');
+    } finally {
+      isBatchTriageLoading = false;
+    }
+  }
+
+  async function confirmDiscardCase() {
+    if (!activeTicketRow) return;
+    const row = activeTicketRow;
+    const cNum = activeCaseNumber || row.raw?.caseNumber || '';
+    isDiscardingCase = true;
+    try {
+      await makeAdminRequest(`support/thread?caseNumber=${encodeURIComponent(cNum)}&responseId=${encodeURIComponent(row.id)}`, 'DELETE');
+      if (row.raw) {
+        delete row.raw.caseNumber;
+        row.raw.ticketCreated = false;
+      }
+      row.who = row.who.filter(([k]) => k !== 'Case #');
+      const b = bugs.find((x: any) => x.id === row.id || x._id === row.id);
+      if (b) { delete b.caseNumber; b.ticketCreated = false; bugs = [...bugs]; }
+      const s = submissions.find((x: any) => x.id === row.id || x._id === row.id);
+      if (s) { delete s.caseNumber; submissions = [...submissions]; }
+      const r: any = responses.find((x: any) => x.id === row.id || x._id === row.id);
+      if (r) { delete r.caseNumber; responses = [...responses]; }
+      addToast(`Case #${cNum || ''} discarded`, 'success');
+      supportModalOpen = false;
+      confirmDiscardCaseOpen = false;
+      activeTicketRow = null;
+      activeCaseNumber = '';
+      await load();
+    } catch (e: any) {
+      addToast(e.message || 'Failed to discard case', 'error');
+    } finally {
+      isDiscardingCase = false;
+    }
+  }
+
+  let expandedQuotes = $state<Record<string, boolean>>({});
+
+  function getMessageQuotes(msg: any): { clean: string; quote: string | null } {
+    if (msg.quotedText) return { clean: msg.text, quote: msg.quotedText };
+    if (!msg.text) return { clean: '', quote: null };
+    const norm = msg.text.replace(/\r\n/g, '\n');
+    const m = norm.match(/\n\s*(?:On\s+[\s\S]+?wrote:|-----Original Message-----|From:[^\n]+\nSent:[^\n]+)[\s\S]*$/i);
+    if (m && typeof m.index === 'number') {
+      const clean = norm.slice(0, m.index).trim();
+      const quote = norm.slice(m.index).trim();
+      if (clean) return { clean, quote };
+    }
+    const bq = norm.match(/\n(?:\s*>[^\n]*\n*)+$/);
+    if (bq && typeof bq.index === 'number') {
+      const clean = norm.slice(0, bq.index).trim();
+      const quote = norm.slice(bq.index).trim();
+      if (clean) return { clean, quote };
+    }
+    return { clean: msg.text, quote: null };
+  }
+
+  function copyCaseNumber(val: string) {
+    try {
+      navigator.clipboard?.writeText(val);
+      copiedCaseNumber = true;
+      setTimeout(() => (copiedCaseNumber = false), 2000);
+      addToast('Case number copied to clipboard', 'success');
+    } catch {}
+  }
+
   function copyInterviewLink(d: Doc) {
     const link = `/interviewer?form=${encodeURIComponent(d.id)}`;
     try { navigator.clipboard?.writeText(link); addToast('Link copied', 'success'); }
@@ -325,7 +873,7 @@
   }
 
   function sessionFor(row: Row) { return row.source === 'chat' ? sessions.find((s) => (s.sessionId || s.id) === row.raw.sessionId) : null; }
-  function statusLabel(s: string) { return s === 'reviewed' ? 'Reviewed' : s === 'completed' || s === 'done' ? 'Done' : s === 'in_progress' ? 'In progress' : s === 'pending' ? 'New' : s === 'open' ? 'Open' : s || 'Done'; }
+  function statusLabel(s: string) { return s === 'reviewed' ? 'Reviewed' : s === 'Replied' || s === 'replied' ? 'Replied' : s === 'completed' || s === 'done' ? 'Done' : s === 'in_progress' ? 'In progress' : s === 'pending' ? 'New' : s === 'open' ? 'Open' : s || 'Done'; }
   function answerCount(id: string) {
     return responses.filter((r) => r.formId === id).length + submissions.filter((s) => s.formType === id).length + (id === 'bug-report' ? bugs.length : 0);
   }
@@ -345,6 +893,8 @@
   function openAnswers(id: string) {
     activeTab = 'responses';
     selectedSection = id;
+    setCookie('admin_forms_tab', 'responses');
+    setCookie('admin_forms_section', id);
   }
   function timeAgo(iso?: string) {
     if (!iso) return '';
@@ -411,7 +961,7 @@
 <div class="p-6 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-6">
     <div>
-      <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight flex items-center gap-2"><HugeiconsIcon icon={Folder01Icon} size={24} class="text-primary" />Forms & Wizards</h1>
+      <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight">Forms & Wizards</h1>
       <p class="text-muted-foreground mt-1 text-sm">Pop-up wizards appear over the site. Chat interviews hold a conversation that fills itself in.</p>
     </div>
     <div class="flex gap-2">
@@ -444,24 +994,104 @@
       <div class="py-16 text-center text-muted-foreground text-sm border border-dashed border-border rounded-2xl">No answers yet. Once people respond, they appear here.</div>
     {:else}
       <div class="bg-card border border-border/60 rounded-2xl overflow-x-auto">
-        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border/50 bg-muted/20">
-          <h3 class="font-semibold text-sm">{sec.title}</h3>
-          <span class="badge">{sec.kind}</span>
-          <span class="text-[11px] text-muted-foreground">{sec.total} answers</span>
-          {#if sec.fresh}<span class="newdot">{sec.fresh} new</span>{/if}
+        <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-border/50 bg-muted/20">
+          <div class="flex items-center gap-2">
+            <h3 class="font-semibold text-sm">{sec.title}</h3>
+            <span class="badge">{sec.kind}</span>
+            <span class="text-[11px] text-muted-foreground">{sec.total} answers</span>
+          </div>
         </div>
+
+        {#if selectedAnswerKeys.length > 0}
+          <div class="flex items-center justify-between gap-3 px-4 py-2 border-b border-border/50 bg-muted/20 text-xs">
+            <span class="font-medium text-foreground">{selectedAnswerKeys.length} selected</span>
+            <div class="flex items-center gap-2">
+              <div class="w-36">
+                <Dropdown
+                  compact
+                  options={bulkStatusOptions}
+                  bind:value={bulkSelectedStatus}
+                  placeholder="Set status"
+                  disabled={isBulkProcessing}
+                  onchange={(val) => applyBulkStatus(val)}
+                />
+              </div>
+              <button class="px-2.5 py-1 rounded-md border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors" onclick={() => confirmBulkDeleteOpen = true} disabled={isBulkProcessing}>
+                Delete
+              </button>
+              <button class="text-muted-foreground hover:text-foreground text-xs ml-1" onclick={() => selectedAnswerKeys = []}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        {/if}
+
         {#if visibleSectionRows.length}
         <table class="w-full text-sm">
-          <thead class="bg-muted/40 text-muted-foreground"><tr><th class="text-left p-3 font-medium">Answer</th><th class="text-left p-3 font-medium">Status</th><th class="text-left p-3 font-medium">When</th><th class="p-3"><span class="sr-only">Actions</span></th></tr></thead>
+          <thead class="bg-muted/40 text-muted-foreground">
+            <tr>
+              <th class="p-3 w-10 text-center">
+                <input
+                  type="checkbox"
+                  class="size-4 rounded accent-primary cursor-pointer align-middle"
+                  checked={allVisibleSelected}
+                  onchange={toggleSelectAllVisible}
+                  title="Select all visible"
+                />
+              </th>
+              <th class="text-left p-3 font-medium">Answer</th>
+              <th class="text-left p-3 font-medium">Status</th>
+              <th class="text-left p-3 font-medium">When</th>
+              <th class="p-3"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
           <tbody class="divide-y divide-border/50">
             {#each visibleSectionRows as r}
-              <tr class="hover:bg-muted/20">
-                <td class="p-3 max-w-md"><span class="block truncate text-muted-foreground">{r.excerpt}</span>{#if r.files.length}<span class="badge">files: {r.files.length}</span>{/if}</td>
+              {@const prio = getPriorityInfo(r)}
+              <tr
+                class="hover:bg-muted/20 {selectedAnswerKeys.includes(r.key) ? 'bg-primary/[0.04]' : ''} cursor-pointer transition-colors"
+                onclick={(e) => {
+                  if ((e.target as HTMLElement).closest('input[type="checkbox"], button, a')) return;
+                  if (isTicketCategory(r.formId, r.source) && r.email && r.email.trim()) {
+                    openSupportThread(r);
+                  } else {
+                    detailResponse = r; statusSel = ''; customStatus = ''; directEmailOpen = false; detailOpen = true;
+                  }
+                }}
+              >
+                <td class="p-3 text-center w-10">
+                  <input
+                    type="checkbox"
+                    class="size-4 rounded accent-primary cursor-pointer align-middle"
+                    checked={selectedAnswerKeys.includes(r.key)}
+                    onchange={() => toggleSelectRow(r.key)}
+                  />
+                </td>
+                <td class="p-3 max-w-md">
+                  <div class="flex items-center gap-1.5">
+                    {#if prio}
+                      <span class="{prio.colorClass} shrink-0 inline-flex items-center" title={prio.label}>
+                        <HugeiconsIcon icon={prio.icon} size={15} />
+                      </span>
+                    {/if}
+                    {#if isTicketCategory(r.formId, r.source) && r.raw?.caseNumber}
+                      <span class="font-mono text-xs text-muted-foreground font-medium shrink-0">
+                        #{r.raw.caseNumber}
+                      </span>
+                    {/if}
+                    <span class="block truncate text-muted-foreground">{r.excerpt}</span>
+                  </div>
+                  {#if r.files.length}<span class="badge">files: {r.files.length}</span>{/if}
+                </td>
                 <td class="p-3 whitespace-nowrap"><span class="badge">{statusLabel(r.status)}</span>{#if isFresh(r)}<span class="newdot ml-1">new</span>{/if}</td>
                 <td class="p-3 text-muted-foreground text-xs whitespace-nowrap">{r.date ? new Date(r.date).toLocaleString() : ''}</td>
                 <td class="p-3 rowactions">
-                  <button class="iconbtn" title="View" onclick={() => { detailResponse = r; statusSel = ''; customStatus = ''; detailOpen = true; }}><HugeiconsIcon icon={ViewIcon} size={15} /></button>
-                  {#if r.email}<a class="iconbtn" title="Email them" href="mailto:{r.email}"><HugeiconsIcon icon={Mail01Icon} size={15} /></a>{/if}
+                  <button class="iconbtn" title="View details" onclick={() => { detailResponse = r; statusSel = ''; customStatus = ''; directEmailOpen = false; detailOpen = true; }}><HugeiconsIcon icon={ViewIcon} size={15} /></button>
+                  {#if isTicketCategory(r.formId, r.source) && r.email}
+                    <button class="iconbtn text-primary" title="Open Support Thread & AI Replies" onclick={() => openSupportThread(r)}>
+                      <HugeiconsIcon icon={Mail01Icon} size={15} />
+                    </button>
+                  {/if}
                   {#if isFresh(r)}<button class="iconbtn" title="Mark reviewed" onclick={() => markReviewed(r)}><HugeiconsIcon icon={Tick01Icon} size={15} /></button>{/if}
                   <button class="iconbtn danger" title="Delete" onclick={() => { deleteResponseTarget = r; confirmDeleteResponseOpen = true; }}><HugeiconsIcon icon={Delete01Icon} size={15} /></button>
                 </td>
@@ -866,53 +1496,575 @@
   {/if}
 </Modal>
 
-  <Modal bind:isOpen={detailOpen} title="Answer detail" onClose={() => { detailOpen = false; detailResponse = null; }} maxWidthClass="sm:max-w-2xl">
+  <Modal bind:isOpen={detailOpen} title="Response" onClose={() => { detailOpen = false; detailResponse = null; }} maxWidthClass="sm:max-w-xl">
     {#if detailResponse}
       {@const s2 = sessionFor(detailResponse)}
-      <p class="text-xs text-muted-foreground mb-3">{docTitle(detailResponse.formId)} · {detailResponse.source === 'chat' ? 'Chat' : detailResponse.source === 'popup' ? 'Pop-up' : 'Bug report'} · {detailResponse.date ? new Date(detailResponse.date).toLocaleString() : ''}</p>
-      <h4 class="group-h">Answers</h4>
-      <div class="rounded-xl border border-border/60 p-4 my-2 text-sm space-y-1">
-        {#each detailResponse.answers as [k, v]}<div class="flex gap-3"><b class="min-w-28 capitalize">{k}</b><span class="text-muted-foreground">{v}</span></div>{:else}<p class="text-muted-foreground">Empty</p>{/each}
-        {#if detailResponse.skipped?.length}<p class="text-xs text-muted-foreground pt-2">Skipped: {detailResponse.skipped.join(', ')}</p>{/if}
+      {@const prio = getPriorityInfo(detailResponse)}
+      <div class="space-y-4 text-xs text-foreground">
+        <!-- Header info -->
+        <div class="flex items-center justify-between text-muted-foreground pb-2 border-b border-border/40">
+          <div class="flex items-center gap-2">
+            <span>{docTitle(detailResponse.formId)}</span>
+            {#if prio}
+              <span class="{prio.colorClass} inline-flex items-center gap-1 text-xs font-medium" title={prio.label}>
+                <HugeiconsIcon icon={prio.icon} size={14} />
+                <span>{prio.label}</span>
+              </span>
+            {/if}
+          </div>
+          <span>{detailResponse.date ? new Date(detailResponse.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+        </div>
+
+        <!-- Answers -->
+        <div class="space-y-2">
+          <div class="text-[11px] font-medium text-muted-foreground tracking-wider uppercase">Answers</div>
+          <div class="space-y-1.5">
+            {#each detailResponse.answers as [k, v]}
+              <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3 py-1 border-b border-border/20 last:border-0">
+                <span class="text-muted-foreground font-medium sm:w-28 shrink-0 capitalize">{k}</span>
+                <span class="text-foreground flex-1 break-words">{v}</span>
+              </div>
+            {:else}
+              <p class="text-muted-foreground">No answers recorded</p>
+            {/each}
+            {#if detailResponse.skipped?.length}
+              <p class="text-muted-foreground text-[11px] pt-1">Skipped: {detailResponse.skipped.join(', ')}</p>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Conversation if chat -->
+        {#if detailResponse.source === 'chat' && s2?.messages?.length}
+          <div class="space-y-2 pt-2 border-t border-border/30">
+            <div class="text-[11px] font-medium text-muted-foreground tracking-wider uppercase">Conversation</div>
+            <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {#each s2.messages as m}
+                <div class="py-1 border-b border-border/20 last:border-0">
+                  <span class="font-medium text-foreground">{m.role === 'user' ? 'Visitor' : 'Interviewer'}:</span>
+                  <span class="text-muted-foreground ml-1">{m.content}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Files -->
+        {#if detailResponse.files.length}
+          <div class="space-y-2 pt-2 border-t border-border/30">
+            <div class="text-[11px] font-medium text-muted-foreground tracking-wider uppercase">Files</div>
+            <div class="space-y-1">
+              {#each detailResponse.files as f}
+                <div class="flex items-center justify-between text-muted-foreground py-1 border-b border-border/20 last:border-0">
+                  <span class="text-foreground font-medium">{f.filename || f.name}</span>
+                  <span>{f.size ? `${Math.round(f.size / 1024)} KB` : ''}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Contact info -->
+        {#if detailResponse.who.length || detailResponse.email}
+          <div class="space-y-2 pt-2 border-t border-border/30">
+            <div class="text-[11px] font-medium text-muted-foreground tracking-wider uppercase">Contact</div>
+            <div class="space-y-1">
+              {#each detailResponse.who as [k, v]}
+                <div class="flex items-baseline gap-3 py-1 border-b border-border/20 last:border-0">
+                  <span class="text-muted-foreground font-medium sm:w-28 shrink-0">{k}</span>
+                  <span class="text-foreground">{v}</span>
+                </div>
+              {/each}
+              {#if detailResponse.email}
+                <div class="flex items-baseline gap-3 py-1 border-b border-border/20 last:border-0">
+                  <span class="text-muted-foreground font-medium sm:w-28 shrink-0">Email</span>
+                  <span class="text-foreground">{detailResponse.email}</span>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Email / Support Thread Section (Only for bug reports and feedback) -->
+        {#if isTicketCategory(detailResponse.formId, detailResponse.source) && detailResponse.email}
+          <div class="pt-2 border-t border-border/30">
+            <button
+              class="px-3.5 py-2 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors inline-flex items-center gap-2 text-xs font-semibold shadow-xs"
+              onclick={() => {
+                const r = detailResponse;
+                detailOpen = false;
+                if (r) openSupportThread(r);
+              }}
+            >
+              <HugeiconsIcon icon={Mail01Icon} size={14} />
+              Open Support Thread & AI Replies
+            </button>
+          </div>
+        {/if}
+
+        <!-- Status -->
+        <div class="pt-2 border-t border-border/30 space-y-2">
+          <div class="text-[11px] font-medium text-muted-foreground tracking-wider uppercase">Status</div>
+          <div class="flex flex-wrap gap-1.5">
+            {#each REVIEW_STATUS as t}
+              <button
+                class="px-2.5 py-1 rounded-md text-xs border transition-colors {statusSel === t ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border text-muted-foreground hover:text-foreground'}"
+                onclick={() => { statusSel = t; customStatus = ''; }}
+              >
+                {t}
+              </button>
+            {/each}
+          </div>
+          <label class="block mt-2 space-y-1">
+            <span class="text-[11px] text-muted-foreground">Or write a custom status:</span>
+            <input
+              class="w-full text-xs bg-background border border-border rounded-lg px-2.5 py-1.5 text-foreground outline-none focus:border-primary transition-colors"
+              bind:value={customStatus}
+              oninput={() => statusSel = ''}
+              placeholder="e.g. Needs engineering review"
+            />
+          </label>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="flex items-center justify-between pt-3 border-t border-border/40">
+          <button class="text-destructive text-xs hover:underline" onclick={() => { deleteResponseTarget = detailResponse; detailOpen = false; detailResponse = null; confirmDeleteResponseOpen = true; }}>
+            Delete
+          </button>
+          <div class="flex items-center gap-2">
+            <button class="px-3.5 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground" onclick={() => { detailOpen = false; detailResponse = null; }}>
+              Close
+            </button>
+            <button
+              class="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
+              onclick={() => {
+                const s = customStatus.trim() || statusSel;
+                if (!s) { addToast('Select a status first', 'error'); return; }
+                if (detailResponse) { markReviewed(detailResponse, s); detailOpen = false; }
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </div>
       </div>
-      {#if detailResponse.source === 'chat'}
-        <h4 class="group-h mt-4">Conversation</h4>
-        <div class="rounded-xl border border-border/60 p-4 my-2 text-sm space-y-2 max-h-64 overflow-auto">
-          {#each s2?.messages || [] as m}<div><b class="text-xs">{m.role === 'user' ? 'Visitor' : 'Interviewer'}: </b>{m.content}</div>{:else}<p class="text-muted-foreground">No transcript stored.</p>{/each}
+    {/if}
+  </Modal>
+
+  <!-- Full-Blown Support Ticket & Thread Modal -->
+  <Modal bind:isOpen={supportModalOpen} maxWidthClass="sm:max-w-4xl" panelClass="flex flex-col max-h-[92vh]">
+    {#snippet header()}
+      {@const prio = getPriorityInfo({ ...activeTicketRow, raw: { ...activeTicketRow?.raw, isImportant: ticketIsImportant } })}
+      <div class="flex items-center justify-between gap-3 w-full py-1">
+        <div class="flex items-center gap-2.5 flex-wrap min-w-0">
+          <div class="flex items-center gap-1.5 font-mono text-xs shrink-0">
+            <span class="font-semibold text-foreground tracking-tight">
+              Case Number: {activeCaseNumber}
+            </span>
+            {#if activeCaseNumber}
+              <button
+                class="text-muted-foreground hover:text-foreground transition-colors p-0.5 cursor-pointer"
+                title="Copy Case Number"
+                onclick={() => copyCaseNumber(activeCaseNumber)}
+              >
+                {#if copiedCaseNumber}
+                  <Check class="size-3 text-emerald-500" />
+                {:else}
+                  <Copy class="size-3" />
+                {/if}
+              </button>
+              <button
+                type="button"
+                class="text-muted-foreground hover:text-destructive transition-colors p-0.5 cursor-pointer ml-0.5 inline-flex items-center justify-center"
+                title="Discard Case"
+                onclick={() => (confirmDiscardCaseOpen = true)}
+              >
+                <HugeiconsIcon icon={Delete01Icon} size={13} />
+              </button>
+            {/if}
+          </div>
+
+          {#if prio}
+            <span class="{prio.colorClass} shrink-0 inline-flex items-center gap-1 text-xs font-medium" title={prio.label}>
+              <HugeiconsIcon icon={prio.icon} size={15} />
+              <span>{prio.label}</span>
+            </span>
+          {/if}
+
+          <div class="flex items-center gap-1.5 text-xs text-muted-foreground border-l border-border/50 pl-2.5 ml-1 min-w-0">
+            <User class="size-3.5 shrink-0" />
+            <span class="font-medium text-foreground max-w-[160px] sm:max-w-[220px] truncate" title={activeTicketRow?.email}>{activeTicketRow?.email}</span>
+          </div>
         </div>
-      {/if}
-      {#if detailResponse.files.length}
-        <h4 class="group-h mt-4">Attached files</h4>
-        <div class="rounded-xl border border-border/60 p-4 my-2 text-sm space-y-1">
-          {#each detailResponse.files as f}<div class="flex gap-3 items-baseline"><b>{f.filename || f.name}</b><span class="text-muted-foreground text-xs">{f.path || ''}{#if f.size} · {Math.round(f.size / 1024)} KB{/if}</span></div>{/each}
+
+        <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+          <div class="w-36 sm:w-40">
+            <Dropdown
+              compact={true}
+              options={TICKET_STATUS_OPTIONS}
+              value={isCustomTicketStatus ? '__custom__' : getDropdownStatusValue(ticketStatus)}
+              onchange={async (val) => {
+                if (val === '__custom__') {
+                  isCustomTicketStatus = true;
+                  tick().then(() => {
+                    const el = document.getElementById('custom-status-input');
+                    el?.focus();
+                  });
+                } else {
+                  isCustomTicketStatus = false;
+                  await updateTicketStatus(val);
+                }
+              }}
+            />
+          </div>
+          {#if isCustomTicketStatus}
+            <input
+              id="custom-status-input"
+              class="text-xs bg-background border border-primary/50 ring-1 ring-primary/20 rounded-lg px-2.5 py-1 text-foreground outline-none focus:border-primary w-32 sm:w-36 transition-colors shadow-2xs"
+              placeholder="Type custom status..."
+              bind:value={ticketStatus}
+              onkeydown={(e) => { if (e.key === 'Enter') updateTicketStatus(ticketStatus); }}
+              onblur={() => updateTicketStatus(ticketStatus)}
+            />
+          {/if}
         </div>
-      {/if}
-      {#if detailResponse.who.length}
-        <h4 class="group-h mt-4">Submitted by</h4>
-        <div class="rounded-xl border border-border/60 p-4 my-2 text-sm space-y-1">
-          {#each detailResponse.who as [k, v]}<div class="flex gap-3"><b class="min-w-28">{k}</b><span class="text-muted-foreground">{v}</span></div>{/each}
-          {#if detailResponse.email}<div class="flex gap-3"><b class="min-w-28">Email</b><a class="text-primary underline" href="mailto:{detailResponse.email}">{detailResponse.email}</a></div>{/if}
-        </div>
-      {/if}
-      <h4 class="group-h mt-4">Set status</h4>
-      <div class="flex flex-wrap gap-2 my-2">
-        {#each REVIEW_STATUS as t}
-          <button class="tagchip {statusSel === t ? 'active' : ''}" onclick={() => { statusSel = t; customStatus = ''; }}>{t}</button>
-        {/each}
       </div>
-      <label class="fld mt-2">Or write your own<input bind:value={customStatus} oninput={() => statusSel = ''} placeholder="e.g. Needs design review" /></label>
-      <div class="flex justify-between items-center mt-4">
-        <div class="flex gap-2">
-          {#if detailResponse.email}<a class="px-4 py-2 rounded-xl border border-border text-sm inline-flex items-center gap-2" href="mailto:{detailResponse.email}"><HugeiconsIcon icon={Mail01Icon} size={14} />Email them</a>{/if}
-          <button class="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm" onclick={() => { const s = customStatus.trim() || statusSel; if (!s) { addToast('Pick or write a status first', 'error'); return; } if (detailResponse) { markReviewed(detailResponse, s); detailOpen = false; } }}>Save review</button>
+    {/snippet}
+
+    {#if activeTicketRow}
+      <div class="flex flex-col h-full space-y-4">
+        <!-- Overview -->
+        {#if activeTicketRow.source === 'bug'}
+          <div class="rounded-xl border border-border/50 bg-muted/15 p-3.5 space-y-2 text-xs">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold text-foreground text-sm">
+                {activeTicketRow.raw?.title || 'Bug Report'}
+              </span>
+              <span class="text-[11px] text-muted-foreground">
+                {activeTicketRow.date ? new Date(activeTicketRow.date).toLocaleDateString() : ''}
+              </span>
+            </div>
+
+            {#if activeTicketRow.raw?.description}
+              <div class="text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                {activeTicketRow.raw?.description}
+              </div>
+            {/if}
+
+            {#if activeTicketRow.raw?.stepsToReproduce}
+              <div class="text-muted-foreground whitespace-pre-wrap text-[11px] pt-1.5 border-t border-border/30">
+                <span class="font-medium text-foreground">Steps to reproduce: </span>{activeTicketRow.raw?.stepsToReproduce}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Conversation Thread Timeline Controls -->
+        <div class="flex items-center justify-between text-xs font-medium text-muted-foreground px-1">
+          <span class="text-[11px] uppercase tracking-wider font-semibold">Conversation Thread</span>
+          <button
+            class="inline-flex items-center gap-1.5 text-[11px] hover:text-foreground transition-colors cursor-pointer px-2 py-1 rounded-md hover:bg-muted/30"
+            onclick={() => activeTicketRow && loadThread(activeTicketRow)}
+            title="Refresh conversation"
+          >
+            <RefreshCw class="size-3 {threadLoading ? 'animate-spin text-primary' : ''}" />
+            <span>Refresh</span>
+          </button>
         </div>
-        <button class="px-4 py-2 rounded-xl border border-destructive/40 text-destructive text-sm" onclick={() => { deleteResponseTarget = detailResponse; detailOpen = false; detailResponse = null; confirmDeleteResponseOpen = true; }}>Delete</button>
+
+        <!-- Conversation Thread Timeline -->
+        <div class="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[360px] min-h-[160px] border border-border/40 rounded-xl p-3 bg-muted/10">
+          {#if threadLoading}
+            <div class="py-12 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
+              <RefreshCw class="size-5 animate-spin text-primary" />
+              <span>Loading conversation...</span>
+            </div>
+          {:else if threadMessages.length === 0}
+            <div class="py-10 text-center text-muted-foreground text-xs flex flex-col items-center gap-2">
+              <MessageSquare class="size-7 text-muted-foreground/30" />
+              <p>No messages exchanged yet.</p>
+            </div>
+          {:else}
+            {#each threadMessages as msg}
+              {@const parsed = getMessageQuotes(msg)}
+              {#if msg.isAiGenerated}
+                <!-- Automated Reply -->
+                <div class="rounded-xl border border-primary/25 bg-primary/[0.02] p-3.5 space-y-1.5">
+                  <div class="flex items-center justify-between text-[11px] text-muted-foreground border-b border-primary/10 pb-1.5">
+                    <span class="font-medium text-foreground">Materio Support (Auto-Reply)</span>
+                    <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleString() : ''}</span>
+                  </div>
+                  <div class="text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed font-sans">
+                    {parsed.clean || msg.text}
+                  </div>
+                  {#if parsed.quote}
+                    <div class="pt-1">
+                      <button
+                        type="button"
+                        class="px-2 py-0.5 rounded text-[11px] font-mono tracking-wider text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted/70 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                        onclick={() => (expandedQuotes[msg.id] = !expandedQuotes[msg.id])}
+                        title="Toggle quoted email history"
+                      >
+                        <span>···</span>
+                        <span class="text-[10px] font-sans opacity-75">{expandedQuotes[msg.id] ? 'Hide quoted text' : 'Show quoted text'}</span>
+                      </button>
+                      {#if expandedQuotes[msg.id]}
+                        <div class="mt-2 pl-3 border-l-2 border-border/60 text-[11px] text-muted-foreground/80 whitespace-pre-wrap leading-relaxed font-sans bg-muted/20 p-2.5 rounded-r-lg max-h-48 overflow-y-auto">
+                          {parsed.quote}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {:else if msg.direction === 'inbox'}
+                <!-- Inbound Customer Message -->
+                <div class="mr-8 rounded-xl border border-border/60 bg-background p-3.5 space-y-1.5 shadow-xs">
+                  <div class="flex items-center justify-between text-[11px] text-muted-foreground border-b border-border/30 pb-1.5">
+                    <span class="font-medium text-foreground">Customer ({msg.from || activeTicketRow.email})</span>
+                    <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleString() : ''}</span>
+                  </div>
+                  {#if msg.subject && !msg.subject.startsWith('Re:')}
+                    <div class="text-[11px] font-semibold text-foreground/80">{msg.subject}</div>
+                  {/if}
+                  <div class="text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed font-sans">
+                    {parsed.clean || msg.text}
+                  </div>
+                  {#if parsed.quote}
+                    <div class="pt-1">
+                      <button
+                        type="button"
+                        class="px-2 py-0.5 rounded text-[11px] font-mono tracking-wider text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted/70 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                        onclick={() => (expandedQuotes[msg.id] = !expandedQuotes[msg.id])}
+                        title="Toggle quoted email history"
+                      >
+                        <span>···</span>
+                        <span class="text-[10px] font-sans opacity-75">{expandedQuotes[msg.id] ? 'Hide quoted text' : 'Show quoted text'}</span>
+                      </button>
+                      {#if expandedQuotes[msg.id]}
+                        <div class="mt-2 pl-3 border-l-2 border-border/60 text-[11px] text-muted-foreground/80 whitespace-pre-wrap leading-relaxed font-sans bg-muted/20 p-2.5 rounded-r-lg max-h-48 overflow-y-auto">
+                          {parsed.quote}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {:else}
+                <!-- Outbound Admin Response -->
+                <div class="ml-8 rounded-xl border border-border/60 bg-muted/30 p-3.5 space-y-1.5">
+                  <div class="flex items-center justify-between text-[11px] text-muted-foreground border-b border-border/30 pb-1.5">
+                    <span class="font-medium text-foreground">Materio Support</span>
+                    <span>{msg.createdAt ? new Date(msg.createdAt).toLocaleString() : ''}</span>
+                  </div>
+                  <div class="text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed font-sans">
+                    {parsed.clean || msg.text}
+                  </div>
+                  {#if parsed.quote}
+                    <div class="pt-1">
+                      <button
+                        type="button"
+                        class="px-2 py-0.5 rounded text-[11px] font-mono tracking-wider text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted/70 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                        onclick={() => (expandedQuotes[msg.id] = !expandedQuotes[msg.id])}
+                        title="Toggle quoted email history"
+                      >
+                        <span>···</span>
+                        <span class="text-[10px] font-sans opacity-75">{expandedQuotes[msg.id] ? 'Hide quoted text' : 'Show quoted text'}</span>
+                      </button>
+                      {#if expandedQuotes[msg.id]}
+                        <div class="mt-2 pl-3 border-l-2 border-border/60 text-[11px] text-muted-foreground/80 whitespace-pre-wrap leading-relaxed font-sans bg-muted/20 p-2.5 rounded-r-lg max-h-48 overflow-y-auto">
+                          {parsed.quote}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            {/each}
+          {/if}
+        </div>
+
+        <!-- Reply Composer Area -->
+        <div class="border border-border/60 rounded-xl p-3.5 bg-background space-y-2.5">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <span class="text-xs font-semibold text-foreground">
+              Reply to {activeTicketRow.email}
+            </span>
+          </div>
+
+          <!-- Subject -->
+          <input
+            class="w-full text-xs bg-muted/30 border border-border rounded-lg px-3 py-1.5 text-foreground outline-none focus:border-primary transition-colors"
+            placeholder="Subject"
+            bind:value={ticketReplySubject}
+          />
+
+          <!-- Body with inside action toolbar (unboxed, frameless) -->
+          <div class="rounded-xl border border-border/80 bg-background focus-within:border-primary/80 transition-all flex flex-col overflow-hidden">
+            <textarea
+              rows="4"
+              class="w-full text-xs bg-transparent border-0 p-3 text-foreground outline-none resize-y transition-colors leading-relaxed placeholder:text-muted-foreground/60 min-h-[96px]"
+              placeholder="Type your reply message..."
+              bind:value={ticketReplyBody}
+            ></textarea>
+
+            <!-- Bottom action toolbar inside typing box -->
+            <div class="flex items-center justify-between gap-2 px-3 py-1.5 border-t border-border/30 bg-muted/5">
+              <div class="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground select-none">
+                <button type="button" class="hover:text-foreground transition-colors cursor-pointer" onclick={() => draftWithAi('Inform that a patch has been deployed and ask them to verify.')}>
+                  Fix Deployed
+                </button>
+                <span class="text-border/60">•</span>
+                <button type="button" class="hover:text-foreground transition-colors cursor-pointer" onclick={() => draftWithAi('Ask for console logs, device details, and screenshots.')}>
+                  Request Logs
+                </button>
+                <span class="text-border/60">•</span>
+                <button type="button" class="hover:text-foreground transition-colors cursor-pointer" onclick={() => draftWithAi('Explain that an engineer is actively investigating this report.')}>
+                  Investigating
+                </button>
+                <span class="text-border/60">•</span>
+                <button type="button" class="hover:text-foreground transition-colors cursor-pointer" onclick={() => draftWithAi('Ask if the issue is now resolved on their end.')}>
+                  Verify Resolution
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2 ml-auto shrink-0 select-none">
+                <!-- Enhance Typed Response with AI (Frameless, unboxed Magic Wand) -->
+                <button
+                  type="button"
+                  class="text-muted-foreground hover:text-primary transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed p-1 inline-flex items-center justify-center"
+                  onclick={enhanceTypedResponseWithAi}
+                  disabled={isEnhancingAi || !ticketReplyBody.trim()}
+                  title="Enhance response with AI"
+                >
+                  <HugeiconsIcon icon={MagicWand01Icon} size={15} class="{isEnhancingAi ? 'animate-spin text-primary' : ''}" />
+                </button>
+
+                <!-- Draft with AI (Frameless, unboxed) -->
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors cursor-pointer disabled:opacity-30 p-1"
+                  onclick={() => draftWithAi()}
+                  disabled={isDraftingAi}
+                  title="Draft response using conversation context"
+                >
+                  <Sparkles class="size-3.5 {isDraftingAi ? 'animate-spin text-primary' : ''}" />
+                  <span>Draft with AI</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer / Dispatch -->
+          <div class="flex items-center justify-between gap-3 pt-2 border-t border-border/40 flex-wrap">
+            <div class="flex items-center gap-3 flex-wrap">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs text-muted-foreground whitespace-nowrap">Escalate to:</span>
+                <div class="w-44">
+                  <Dropdown
+                    compact={true}
+                    direction="up"
+                    options={[
+                      { value: 'none', label: 'None' },
+                      { value: 'jinansh@getmaterio.app', label: 'jinansh@getmaterio.app' },
+                      { value: 'support@getmaterio.app', label: 'support@getmaterio.app' },
+                      { value: 'custom', label: 'Other email...' }
+                    ]}
+                    value={forwardOption}
+                    onchange={(val) => {
+                      forwardOption = val;
+                    }}
+                  />
+                </div>
+                {#if forwardOption === 'custom'}
+                  <input
+                    type="email"
+                    placeholder="Enter email address..."
+                    class="text-xs bg-background border border-border rounded-lg px-2.5 py-1 text-foreground outline-none focus:border-primary w-44 transition-colors"
+                    bind:value={customForwardEmail}
+                  />
+                {/if}
+              </div>
+
+              <div class="flex items-center gap-2 border-l border-border/40 pl-3">
+                <button
+                  type="button"
+                  class="text-xs text-destructive/80 hover:text-destructive hover:underline cursor-pointer inline-flex items-center gap-1 font-medium"
+                  title="Dispose of Case ID and close"
+                  onclick={() => (confirmDiscardCaseOpen = true)}
+                >
+                  <HugeiconsIcon icon={Delete01Icon} size={13} />
+                  Discard Case
+                </button>
+                <span class="text-border/60">|</span>
+                <button
+                  type="button"
+                  class="text-xs text-destructive hover:underline cursor-pointer"
+                  title="Delete this report permanently"
+                  onclick={() => {
+                    deleteResponseTarget = activeTicketRow;
+                    supportModalOpen = false;
+                    confirmDeleteResponseOpen = true;
+                  }}
+                >
+                  Delete Report
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 ml-auto">
+              <button
+                class="px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                onclick={() => (supportModalOpen = false)}
+              >
+                Close
+              </button>
+              <button
+                class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50 transition-opacity cursor-pointer"
+                onclick={sendTicketReply}
+                disabled={isSendingTicketReply || !ticketReplyBody.trim()}
+              >
+                <Send class="size-3.5" />
+                {isSendingTicketReply ? 'Sending...' : 'Send Reply'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     {/if}
   </Modal>
 
 <ConfirmModal bind:isOpen={confirmDeleteOpen} title="Delete this?" message={`Delete “${deleteTarget?.title}”? Its answers stay unless removed separately.`} confirmText="Delete" onConfirm={confirmDelete} onCancel={() => deleteTarget = null} />
 <ConfirmModal bind:isOpen={confirmDeleteResponseOpen} title="Delete this answer?" message="This removes it permanently." confirmText="Delete" onConfirm={confirmDeleteResponse} onCancel={() => deleteResponseTarget = null} />
+<ConfirmModal bind:isOpen={confirmBulkDeleteOpen} title="Delete selected answers?" message={`This will permanently remove ${selectedAnswerKeys.length} selected answer${selectedAnswerKeys.length === 1 ? '' : 's'}.`} confirmText="Delete Selected" onConfirm={confirmBulkDelete} onCancel={() => confirmBulkDeleteOpen = false} />
+
+<Modal bind:isOpen={confirmDiscardCaseOpen} maxWidthClass="sm:max-w-md">
+  {#snippet header()}
+    <div class="flex items-center gap-2 text-destructive font-semibold text-sm">
+      <HugeiconsIcon icon={Delete01Icon} size={18} />
+      <span>Discard Case #{activeCaseNumber}?</span>
+    </div>
+  {/snippet}
+  <div class="space-y-4 text-xs text-muted-foreground pt-1">
+    <p class="leading-relaxed">
+      This will dispose of Case #{activeCaseNumber} and close the support thread, keeping the report intact.
+    </p>
+    <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-border/40">
+      <button
+        type="button"
+        class="px-3.5 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground cursor-pointer whitespace-nowrap transition-colors"
+        onclick={() => (confirmDiscardCaseOpen = false)}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="px-4 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-xs font-semibold hover:opacity-90 cursor-pointer whitespace-nowrap transition-opacity"
+        disabled={isDiscardingCase}
+        onclick={() => confirmDiscardCase()}
+      >
+        {isDiscardingCase ? 'Discarding...' : 'Discard Case'}
+      </button>
+    </div>
+  </div>
+</Modal>
 
 <style>
   .group-h { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: hsl(var(--muted-foreground)); margin-bottom: 8px; }
@@ -921,13 +2073,11 @@
   .live { font-size: 10px; padding: 3px 9px; border-radius: 999px; background: hsl(142 60% 45% / .13); color: hsl(142 60% 32%); }
   .draft { font-size: 10px; padding: 3px 9px; border-radius: 999px; background: hsl(var(--muted) / .5); color: hsl(var(--muted-foreground)); }
   .newdot { font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: hsl(215 25% 50% / .12); color: hsl(215 30% 40%); white-space: nowrap; }
-  .tagchip { font-size: 12px; padding: 6px 14px; border-radius: 999px; border: 1px solid hsl(var(--border) / .7); color: hsl(var(--muted-foreground)); background: hsl(var(--background)); }
-  .tagchip.active { border-color: hsl(var(--primary)); color: hsl(var(--primary)); background: hsl(var(--primary) / .08); font-weight: 600; }
   .iconbtn { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; padding: 7px; border-radius: 8px; color: hsl(var(--muted-foreground)); }
   .iconbtn:hover { background: hsl(var(--muted) / .5); color: hsl(var(--foreground)); }
   .iconbtn.danger:hover { color: hsl(var(--destructive)); background: hsl(var(--destructive) / .08); }
   .rowactions { white-space: nowrap; text-align: right; vertical-align: middle; }
-  .rowactions .iconbtn, .rowactions a.iconbtn { display: inline-flex; }
+  .rowactions .iconbtn { display: inline-flex; }
   .answersbtn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border-radius: 8px; color: hsl(var(--muted-foreground)); }
   .answersbtn:hover { background: hsl(var(--muted) / .5); color: hsl(var(--foreground)); }
   .answersbtn span { font-size: 12px; line-height: 1; }

@@ -22,9 +22,9 @@ export async function GET({ request, url }) {
   if (!(await checkAdmin(request))) return json({ error: 'Unauthorized' }, { status: 401 });
   
   const all = url.searchParams.get('all') === 'true';
-  const db = await getDb();
   
   try {
+    const db = await getDb();
     const query = all ? {} : { $or: [{ isActive: true }, { enabled: true }] };
     const promotions = await db.collection('promotions').find(query).sort({ createdAt: -1, lastUpdated: -1 }).toArray();
     

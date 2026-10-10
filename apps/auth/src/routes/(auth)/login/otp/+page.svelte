@@ -26,6 +26,22 @@
   let isSuspended = $state(false);
   let suspensionReason = $state('');
 
+  function isLegacySuspensionReason(reason?: string): boolean {
+    if (!reason) return true;
+    const trimmed = reason.trim();
+    if (!trimmed) return true;
+    if (/^(your\s+(materio\s+id|account)|access\b|this\s+(materio\s+id|account)|we\s+have|you\s+have)/i.test(trimmed)) {
+      return false;
+    }
+    if (trimmed.length > 45 && /[.!?]$/.test(trimmed)) {
+      return false;
+    }
+    if ((trimmed.toLowerCase().includes('suspended') || trimmed.toLowerCase().includes('revoked')) && !/^violat/i.test(trimmed)) {
+      return false;
+    }
+    return true;
+  }
+
   function resetOtpLogin() {
     isSuspended = false;
     suspensionReason = '';
@@ -196,9 +212,15 @@
             <h1 class="text-2xl font-serif font-normal tracking-tight text-foreground">
               Materio ID Suspended
             </h1>
-            <p class="text-sm text-muted-foreground leading-relaxed">
-              Your account has been suspended for <span class="font-medium text-foreground">{suspensionReason}</span>.
-            </p>
+            {#if isLegacySuspensionReason(suspensionReason)}
+              <p class="text-sm text-muted-foreground leading-relaxed">
+                Your account has been suspended for <span class="font-medium text-foreground">{suspensionReason || 'violating our policies'}</span>.
+              </p>
+            {:else}
+              <p class="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                {suspensionReason}
+              </p>
+            {/if}
           </div>
 
           <div class="flex items-center justify-center gap-3 pt-3">

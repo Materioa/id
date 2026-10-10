@@ -2,6 +2,8 @@ import { MongoClient, Db } from 'mongodb';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { dev } from '$app/environment';
+import { getRequestEvent } from '$app/server';
+import type { RequestEvent } from '@sveltejs/kit';
 import { mongoOptions } from '@materio/config/mongo-options';
 
 try {
@@ -16,27 +18,41 @@ if (!uri) {
 }
 
 const DB_NAME = 'materio';
+const OPTIONS = mongoOptions(dev);
 
 /**
- * One client per isolate, reused for the life of that isolate.
+ * Connection lifecycle.
  *
- * This used to open a brand new MongoClient on every request in production,
- * so each call paid a full TCP + TLS handshake before it could read a single
- * document. The driver already heartbeats the connection and reconnects on
- * its own, so holding it open is safe; the retry below covers the one case it
- * can't fix on its own, a topology that was closed while the isolate was idle.
+ * DEV (Node / Vite): one client cached on globalThis so hot reloads don't pile
+ * up clients. Node is happy to share sockets between requests.
  *
- * Cached on globalThis in dev so hot reloads don't pile up clients.
+ * PRODUCTION (Cloudflare Workers): one client PER REQUEST, closed when the
+ * request finishes (see `closeRequestMongo` in hooks.server.ts).
+ *
+ * A previous version cached a single client per isolate in production too.
+ * Workers forbid that: a socket opened while handling request A cannot be
+ * used while handling request B ("Cannot perform I/O on behalf of a different
+ * request"). The second request on a warm isolate would hang until Cloudflare
+ * killed it and served its own HTML 500 page — which is what the admin
+ * promotions page was showing. Within a single request every getDb() call
+ * shares the same client, so a handler doing several queries still only pays
+ * one handshake.
  */
 type Cache = { _mongo?: MongoClient; _mongoConnecting?: Promise<MongoClient> };
 const cache = globalThis as typeof globalThis & Cache;
 
-const OPTIONS = mongoOptions(dev);
+/** Per-request clients (production only). Keyed by the SvelteKit RequestEvent. */
+const requestClients = new WeakMap<RequestEvent, { client: MongoClient; connecting: Promise<MongoClient> }>();
 
-function createClient(): Promise<MongoClient> {
-  const client = new MongoClient(uri, OPTIONS);
+function connectFresh(): { client: MongoClient; connecting: Promise<MongoClient> } {
+  const client = new MongoClient(uri, { ...OPTIONS, minPoolSize: 0 });
+  return { client, connecting: client.connect() };
+}
+
+function devClientPromise(): Promise<MongoClient> {
+  if (cache._mongoConnecting) return cache._mongoConnecting;
+  const { client, connecting } = connectFresh();
   cache._mongo = client;
-  const connecting = client.connect();
   cache._mongoConnecting = connecting;
   // A failed first connect must not leave a dead client cached forever.
   connecting.catch(() => {
@@ -48,8 +64,29 @@ function createClient(): Promise<MongoClient> {
   return connecting;
 }
 
+function currentEvent(): RequestEvent | null {
+  try {
+    return getRequestEvent();
+  } catch {
+    return null; // called outside a request (e.g. module init)
+  }
+}
+
+function prodClientPromise(): Promise<MongoClient> {
+  const event = currentEvent();
+  if (!event) return connectFresh().connecting;
+
+  let entry = requestClients.get(event);
+  if (!entry) {
+    entry = connectFresh();
+    requestClients.set(event, entry);
+    entry.connecting.catch(() => requestClients.delete(event));
+  }
+  return entry.connecting;
+}
+
 function clientPromise(): Promise<MongoClient> {
-  return cache._mongoConnecting || createClient();
+  return dev ? devClientPromise() : prodClientPromise();
 }
 
 /** True when an error is worth retrying on a fresh connection. */
@@ -68,13 +105,31 @@ export async function getDb(): Promise<Db> {
     return client.db(DB_NAME);
   } catch (err) {
     if (!isConnectionError(err)) throw err;
-    // Stale topology: drop the cached client and try exactly once more.
-    try { await cache._mongo?.close(true); } catch { /* already gone */ }
-    cache._mongo = undefined;
-    cache._mongoConnecting = undefined;
+    // Stale topology (dev) or a failed handshake: drop it and try exactly once more.
+    if (dev) {
+      try { await cache._mongo?.close(true); } catch { /* already gone */ }
+      cache._mongo = undefined;
+      cache._mongoConnecting = undefined;
+    }
     const client = await clientPromise();
     return client.db(DB_NAME);
   }
+}
+
+/**
+ * Close the client opened for this request, if any. Called from the `handle`
+ * hook once the response has been produced; the close is handed to
+ * `waitUntil` so it never delays the response.
+ */
+export function closeRequestMongo(event: RequestEvent) {
+  const entry = requestClients.get(event);
+  if (!entry) return;
+  requestClients.delete(event);
+  const closing = entry.connecting
+    .then((c) => c.close())
+    .catch(() => { /* connect failed or already closed */ });
+  const ctx: any = (event.platform as any)?.ctx ?? (event.platform as any)?.context;
+  if (ctx?.waitUntil) ctx.waitUntil(closing);
 }
 
 export { clientPromise };

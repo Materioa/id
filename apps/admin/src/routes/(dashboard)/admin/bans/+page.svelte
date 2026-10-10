@@ -370,8 +370,8 @@
         {/if}
 
         <div class="space-y-1.5">
-          <label for="reason" class="text-xs font-semibold text-muted-foreground  ">Reason for Ban *</label>
-          <input type="text" id="reason" bind:value={newReason} placeholder="e.g. Abusive behavior, spam" required class="w-full bg-transparent border-0 border-b border-border/50 rounded-none px-0 py-2 text-sm focus:ring-0 focus:border-primary outline-none transition-all" />
+          <label for="reason" class="text-xs font-semibold text-muted-foreground">Suspension Message / Ban Reason *</label>
+          <textarea id="reason" rows="3" bind:value={newReason} placeholder="e.g. Your Materio ID has been suspended for violating our community guidelines." required class="w-full bg-muted/20 border border-border/60 rounded-lg p-2.5 text-xs text-foreground focus:border-primary outline-none transition-all resize-y leading-relaxed"></textarea>
         </div>
 
         <button 

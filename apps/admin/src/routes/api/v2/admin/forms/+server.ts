@@ -86,6 +86,38 @@ export async function GET({ request, url }) {
     const forms = storedForms.map((form: any) => ({ ...form, kind: normaliseKind(form.kind), id: form.id || form._id?.toString() }));
     const activity = activityDocs[0] || getFormActivityDefaults();
     const oid = (d: any) => ({ ...d, id: d._id.toString(), _id: undefined });
+
+    for (const b of bugs) {
+      const email = String(b.email || b.userEmail || '').trim();
+      const hasEmail = Boolean(email && email.includes('@'));
+      if (!hasEmail) {
+        if (b.caseNumber) {
+          delete b.caseNumber;
+          b.ticketCreated = false;
+          db.collection('bug_reports').updateOne(
+            { _id: b._id },
+            { $unset: { caseNumber: '', ticketCreated: '' } }
+          ).catch(() => {});
+        }
+      } else if (!b.caseNumber) {
+        b.caseNumber = String(Math.floor(10000000 + Math.random() * 90000000));
+        db.collection('bug_reports').updateOne({ _id: b._id }, { $set: { caseNumber: b.caseNumber } }).catch(() => {});
+      }
+    }
+
+    for (const s of submissions) {
+      const email = String(s.user?.email || s.data?.email || s.email || '').trim();
+      const hasEmail = Boolean(email && email.includes('@'));
+      if (!hasEmail && s.caseNumber) {
+        delete s.caseNumber;
+        s.ticketCreated = false;
+        db.collection('form_submissions').updateOne(
+          { _id: s._id },
+          { $unset: { caseNumber: '', ticketCreated: '' } }
+        ).catch(() => {});
+      }
+    }
+
     return json({
       forms,
       sessions: sessions.map((s: any) => ({ ...s, id: s.sessionId || s._id.toString() })),
@@ -127,13 +159,40 @@ export async function PATCH({ request }) {
   try {
     const body = await request.json() as any;
     const db = await getDb();
+    const map: Record<string, string> = { responses: INTERVIEWER_COLLECTIONS.responses, submissions: 'form_submissions', bugs: 'bug_reports' };
+
+    if (body.bulkReview && Array.isArray(body.bulkReview.items) && body.bulkReview.items.length) {
+      const { ObjectId } = await import('mongodb');
+      const status = typeof body.bulkReview.status === 'string' && body.bulkReview.status.trim() ? body.bulkReview.status.trim().slice(0, 40) : 'Reviewed';
+      const set: any = { reviewed: true, reviewedAt: new Date().toISOString(), status };
+
+      const byColl = new Map<string, any[]>();
+      for (const item of body.bulkReview.items) {
+        const coll = map[item.source] || INTERVIEWER_COLLECTIONS.responses;
+        if (!byColl.has(coll)) byColl.set(coll, []);
+        try { byColl.get(coll)!.push(new ObjectId(item.id)); } catch {}
+      }
+      for (const [coll, ids] of byColl.entries()) {
+        if (ids.length) {
+          await db.collection(coll).updateMany({ _id: { $in: ids } }, { $set: set });
+        }
+      }
+      return json({ success: true, count: body.bulkReview.items.length });
+    }
+
     if (body.review?.id) {
       const { ObjectId } = await import('mongodb');
-      const map: Record<string, string> = { responses: INTERVIEWER_COLLECTIONS.responses, submissions: 'form_submissions', bugs: 'bug_reports' };
       const coll = map[body.review.source] || INTERVIEWER_COLLECTIONS.responses;
       const set: any = { reviewed: true, reviewedAt: new Date().toISOString() };
       if (typeof body.review.status === 'string' && body.review.status.trim()) set.status = body.review.status.trim().slice(0, 40);
-      await db.collection(coll).updateOne({ _id: new ObjectId(body.review.id) }, { $set: set });
+      const filterOr: any[] = [{ id: body.review.id }];
+      try {
+        filterOr.push({ _id: new ObjectId(body.review.id) });
+      } catch {}
+      if (body.review.caseNumber) {
+        filterOr.push({ caseNumber: String(body.review.caseNumber).trim() });
+      }
+      await db.collection(coll).updateOne({ $or: filterOr }, { $set: set });
       return json({ success: true });
     }
     const { id, published } = body;
@@ -145,17 +204,42 @@ export async function PATCH({ request }) {
 
 export async function DELETE({ request, url }) {
   if (!(await checkAdmin(request))) return json({ error: 'Unauthorized' }, { status: 401 });
-  const db = await getDb();
-  const { ObjectId } = await import('mongodb');
-  const source = url.searchParams.get('source') || 'responses';
-  const responseId = url.searchParams.get('responseId') || url.searchParams.get('id');
-  if (responseId && (source !== 'responses' || url.searchParams.get('responseId'))) {
+  try {
+    const db = await getDb();
+    const { ObjectId } = await import('mongodb');
     const map: Record<string, string> = { responses: INTERVIEWER_COLLECTIONS.responses, submissions: 'form_submissions', bugs: 'bug_reports' };
-    await db.collection(map[source] || INTERVIEWER_COLLECTIONS.responses).deleteOne({ _id: new ObjectId(responseId) });
+
+    let body: any = null;
+    try {
+      if (request.headers.get('content-type')?.includes('application/json')) {
+        body = await request.json();
+      }
+    } catch {}
+
+    if (body?.bulkDelete && Array.isArray(body.bulkDelete) && body.bulkDelete.length) {
+      const byColl = new Map<string, any[]>();
+      for (const item of body.bulkDelete) {
+        const coll = map[item.source] || INTERVIEWER_COLLECTIONS.responses;
+        if (!byColl.has(coll)) byColl.set(coll, []);
+        try { byColl.get(coll)!.push(new ObjectId(item.id)); } catch {}
+      }
+      for (const [coll, ids] of byColl.entries()) {
+        if (ids.length) {
+          await db.collection(coll).deleteMany({ _id: { $in: ids } });
+        }
+      }
+      return json({ success: true, count: body.bulkDelete.length });
+    }
+
+    const source = url.searchParams.get('source') || 'responses';
+    const responseId = url.searchParams.get('responseId') || url.searchParams.get('id');
+    if (responseId && (source !== 'responses' || url.searchParams.get('responseId'))) {
+      await db.collection(map[source] || INTERVIEWER_COLLECTIONS.responses).deleteOne({ _id: new ObjectId(responseId) });
+      return json({ success: true });
+    }
+    const id = url.searchParams.get('id');
+    if (!id) return json({ error: 'ID is required' }, { status: 400 });
+    await db.collection(INTERVIEWER_COLLECTIONS.configs).deleteOne({ id });
     return json({ success: true });
-  }
-  const id = url.searchParams.get('id');
-  if (!id) return json({ error: 'ID is required' }, { status: 400 });
-  await db.collection(INTERVIEWER_COLLECTIONS.configs).deleteOne({ id });
-  return json({ success: true });
+  } catch (error: any) { return json({ error: error.message }, { status: 500 }); }
 }

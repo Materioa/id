@@ -3,9 +3,22 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { userStore } from '$lib/stores/user.svelte';
-  import { clearClientCookie } from '@materio/config';
+  import { clearClientCookie, getClientCookie } from '@materio/config';
 
-  onMount(() => {
+  onMount(async () => {
+    // End the session on the server first, so it disappears from
+    // Accounts → Security instead of lingering as "active".
+    const token = getClientCookie('materio_token') || localStorage.getItem('token');
+    try {
+      await fetch('/api/v2/session', {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include'
+      });
+    } catch (e) {
+      console.error('Failed to revoke session:', e);
+    }
+
     // Clear tokens and state
     userStore.logout();
     clearClientCookie('materio_token');
@@ -19,7 +32,7 @@
       } else {
         goto('/login');
       }
-    }, 1000);
+    }, 600);
   });
 </script>
 

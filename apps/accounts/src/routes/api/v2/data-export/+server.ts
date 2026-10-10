@@ -19,8 +19,13 @@ function getToken(request: Request) {
 }
 
 function getStickerAttachment() {
-  const stickerPath = path.join(process.cwd(), 'assets', 'img', 'sticker.png');
-  const stickerSource = fs.existsSync(stickerPath) ? stickerPath : 'https://materioa.vercel.app/assets/img/sticker.png';
+  const candidates = [
+    path.resolve(process.cwd(), 'packages', 'ui', 'src', 'assets', 'sticker.png'),
+    path.resolve(process.cwd(), '..', 'packages', 'ui', 'src', 'assets', 'sticker.png'),
+    path.resolve(process.cwd(), '..', '..', 'packages', 'ui', 'src', 'assets', 'sticker.png'),
+    path.resolve(process.cwd(), 'static', 'sticker.png')
+  ];
+  const stickerSource = candidates.find((c) => fs.existsSync(c)) || candidates[0];
   return [
     {
       filename: 'sticker.png',

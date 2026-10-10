@@ -6,6 +6,7 @@
   export let message = 'Are you sure you want to proceed?';
   export let confirmText = 'Confirm';
   export let cancelText = 'Cancel';
+  export let confirmVariant: 'primary' | 'danger' = 'primary';
   export let onConfirm: () => void = () => {};
   export let onCancel: () => void = () => {};
 
@@ -28,7 +29,10 @@
       <button onclick={handleCancel} class="px-4 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors">
         {cancelText}
       </button>
-      <button onclick={handleConfirm} class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors">
+      <button
+        onclick={handleConfirm}
+        class="px-4 py-2 text-sm font-medium rounded-lg transition-colors {confirmVariant === 'danger' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'text-white bg-primary hover:bg-primary/90'}"
+      >
         {confirmText}
       </button>
     </div>

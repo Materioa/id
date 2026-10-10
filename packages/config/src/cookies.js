@@ -12,6 +12,8 @@
  *   accounts.getmaterio.app, admin.getmaterio.app, and all subdomains.
  */
 
+import { SESSION_TTL_DAYS } from './session.js';
+
 export const SESSION_COOKIE_NAME = 'materio_token';
 
 export function isProductionDomain(hostOrOrigin) {
@@ -24,7 +26,7 @@ export function isProductionDomain(hostOrOrigin) {
   return hostOrOrigin.includes('getmaterio.app');
 }
 
-export function getSessionCookieOptions(hostOrOrigin, maxAgeDays = 7) {
+export function getSessionCookieOptions(hostOrOrigin, maxAgeDays = SESSION_TTL_DAYS) {
   const isProd = isProductionDomain(hostOrOrigin);
   return {
     path: '/',
@@ -39,7 +41,7 @@ export function getSessionCookieOptions(hostOrOrigin, maxAgeDays = 7) {
 /**
  * Server-side helper to set session cookie on SvelteKit event.cookies
  */
-export function setSessionCookie(cookies, token, hostOrOrigin, maxAgeDays = 7) {
+export function setSessionCookie(cookies, token, hostOrOrigin, maxAgeDays = SESSION_TTL_DAYS) {
   if (!cookies || !token) return;
   const options = getSessionCookieOptions(hostOrOrigin, maxAgeDays);
   cookies.set(SESSION_COOKIE_NAME, token, options);
@@ -69,7 +71,7 @@ export function getClientCookie(name = SESSION_COOKIE_NAME) {
 /**
  * Client-side helper to set a cookie across the ecosystem
  */
-export function setClientCookie(name = SESSION_COOKIE_NAME, value, days = 7) {
+export function setClientCookie(name = SESSION_COOKIE_NAME, value, days = SESSION_TTL_DAYS) {
   if (typeof document === 'undefined') return;
   const isProd = window.location.hostname.includes('getmaterio.app');
   const domainPart = isProd ? '; domain=.getmaterio.app' : '';
