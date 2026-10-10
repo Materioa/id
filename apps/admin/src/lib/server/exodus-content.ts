@@ -212,10 +212,11 @@ export async function saveExodusPost(payload: {
 
   const categories = docType === 'changelog' ? ['whats-new'] : Array.isArray(metadata.categories) ? metadata.categories : [];
 
-  let url = isPage ? (metadata.permalink || `/${slug}`) : (metadata.permalink || `/posts/${slug}`);
-  if (docType === 'changelog') {
-    url = `/changelog#${slug}`;
-  }
+  let url = isPage
+    ? (metadata.permalink || `/${slug}`)
+    : docType === 'changelog'
+    ? `/changelog#${slug}`
+    : (metadata.permalink || `/docs/${slug}`);
 
   const frontmatter: Record<string, any> = {
     title,
@@ -226,6 +227,7 @@ export async function saveExodusPost(payload: {
     ...(categories.length > 0 ? { categories } : {}),
     ...(isPage ? { permalink: metadata.permalink || `/${slug}` } : {}),
     date: dateStr,
+    visibility: metadata.visibility || 'public',
     ...(metadata.draft !== undefined ? { draft: Boolean(metadata.draft) } : {}),
     ...(metadata.hidden !== undefined ? { hidden: Boolean(metadata.hidden) } : {}),
     ...(metadata.no_ads !== undefined ? { 'no-ads': Boolean(metadata.no_ads) } : {}),

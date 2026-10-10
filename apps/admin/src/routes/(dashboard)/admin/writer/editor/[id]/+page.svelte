@@ -46,9 +46,9 @@
   let date = $state(data.post?.date || new Date().toISOString().split('T')[0]);
   let excerpt = $state(data.post?.excerpt || data.post?.metadata?.excerpt || '');
   let image = $state(data.post?.image || data.post?.metadata?.image || '');
-  let draft = $state(Boolean(data.post?.draft));
-  let hidden = $state(Boolean(data.post?.hidden));
-  let visibility = $state(data.post?.visibility || 'public');
+  let draft = $state(Boolean(data.post?.draft ?? data.post?.metadata?.draft));
+  let hidden = $state(Boolean(data.post?.hidden ?? data.post?.metadata?.hidden));
+  let visibility = $state(data.post?.visibility || data.post?.metadata?.visibility || 'public');
 
   // Custom frontmatter fields
   let customFields = $state<{ key: string; value: string }[]>([]);
@@ -286,9 +286,10 @@
       hasUnsavedChanges = false;
       addToast('Saved successfully', 'success');
 
-      if (id === 'new' && resData.post?.id) {
-        id = resData.post.id;
-        window.history.replaceState({}, '', `/admin/writer/editor/${id}?scope=${scope}`);
+      const newId = resData.id || resData.post?.id;
+      if (id === 'new' && newId) {
+        id = newId;
+        window.history.replaceState({}, '', `/admin/writer/editor/${id}?scope=${scope}${scope === 'exodus' ? `&docType=${docType}` : ''}`);
       }
     } catch (err: any) {
       addToast(err.message || 'Error saving post', 'error');
@@ -909,16 +910,39 @@
         {/if}
       </div>
 
-      <!-- Toggles -->
-      <div class="pt-2 border-t border-border/50 space-y-2 text-xs font-sans">
-        <label class="flex items-center justify-between cursor-pointer py-1">
-          <span class="text-muted-foreground">Draft mode</span>
-          <input type="checkbox" bind:checked={draft} onchange={markDirty} class="rounded border-border text-primary focus:ring-0" />
-        </label>
-        <label class="flex items-center justify-between cursor-pointer py-1">
-          <span class="text-muted-foreground">Unlisted</span>
-          <input type="checkbox" bind:checked={hidden} onchange={markDirty} class="rounded border-border text-primary focus:ring-0" />
-        </label>
+      <!-- Publication & Scopes -->
+      <div class="pt-2 border-t border-border/50 space-y-3.5 text-xs font-sans">
+        <div class="space-y-1.5">
+          <label class="text-xs text-muted-foreground font-sans block">Visibility</label>
+          <Dropdown
+            value={visibility}
+            options={[
+              { value: 'public', label: 'Public' },
+              { value: 'private', label: 'Private' }
+            ]}
+            onchange={(val: string) => { visibility = val; markDirty(); }}
+          />
+          <p class="text-[11px] text-muted-foreground/70">
+            {visibility === 'private' ? 'Private: restricted to authenticated admins and team.' : 'Public: open to all visitors.'}
+          </p>
+        </div>
+
+        <div class="space-y-2 pt-2 border-t border-border/40">
+          <label class="flex items-center justify-between cursor-pointer py-1">
+            <div>
+              <span class="text-foreground font-medium block">Draft mode</span>
+              <span class="text-[11px] text-muted-foreground block">Save without publishing publicly</span>
+            </div>
+            <input type="checkbox" bind:checked={draft} onchange={markDirty} class="rounded border-border text-primary focus:ring-0 h-4 w-4" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer py-1">
+            <div>
+              <span class="text-foreground font-medium block">Unlisted</span>
+              <span class="text-[11px] text-muted-foreground block">Hide from feed and navigation listings</span>
+            </div>
+            <input type="checkbox" bind:checked={hidden} onchange={markDirty} class="rounded border-border text-primary focus:ring-0 h-4 w-4" />
+          </label>
+        </div>
       </div>
 
       <div class="pt-4">

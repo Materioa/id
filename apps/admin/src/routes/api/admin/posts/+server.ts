@@ -74,12 +74,21 @@ export const POST: RequestHandler = async ({ request, cookies, fetch }) => {
     if (!slug) slug = slugify(title);
 
     metadata = metadata || {};
+    if (body.draft !== undefined) metadata.draft = Boolean(body.draft);
+    if (body.hidden !== undefined) metadata.hidden = Boolean(body.hidden);
+    if (body.visibility !== undefined) metadata.visibility = body.visibility;
+    if (body.category !== undefined && !metadata.category) metadata.category = body.category;
+    if (body.date !== undefined && !metadata.date) metadata.date = body.date;
+    if (body.excerpt !== undefined && !metadata.excerpt) metadata.excerpt = body.excerpt;
+    if (body.image !== undefined && !metadata.image) metadata.image = body.image;
+    if (body.author !== undefined && !metadata.author) metadata.author = body.author;
+
     const attribution = resolveAttribution(
       {
         saved_by_name: saved_by_name || user.displayName || user.username,
         saved_by_display_name: saved_by_display_name || user.displayName,
         saved_by_avatar: saved_by_avatar || user.profilePicture,
-        author_name: metadata.author_name,
+        author_name: metadata.author_name || metadata.author,
         author_avatar: metadata.author_avatar
       },
       request.headers
@@ -102,8 +111,8 @@ export const POST: RequestHandler = async ({ request, cookies, fetch }) => {
 
     // Default Scope: Room (room.getmaterio.app - MongoDB)
     const draft = Boolean(metadata.draft);
-    const category = draft ? 'draft' : (metadata.category || '').trim();
-    const categorySlug = draft ? 'draft' : slugify(category);
+    const category = (metadata.category || '').trim();
+    const categorySlug = slugify(category);
     metadata.category = category;
     const date = metadata.date || new Date().toISOString().split('T')[0];
     const excerpt = metadata.excerpt || '';

@@ -90,7 +90,9 @@
   const statusOptions = [
     { value: 'all', label: 'All statuses' },
     { value: 'published', label: 'Published' },
-    { value: 'draft', label: 'Drafts' }
+    { value: 'draft', label: 'Drafts' },
+    { value: 'unlisted', label: 'Unlisted' },
+    { value: 'private', label: 'Private' }
   ];
 
   const exodusTypeOptions = [
@@ -99,6 +101,15 @@
     { value: 'doc', label: 'Docs' },
     { value: 'legal', label: 'Legal' }
   ];
+
+  function matchesStatus(p: any, filter: string) {
+    if (filter === 'all') return true;
+    if (filter === 'published') return !p.draft && !p.hidden && p.visibility !== 'private';
+    if (filter === 'draft') return Boolean(p.draft);
+    if (filter === 'unlisted') return Boolean(p.hidden);
+    if (filter === 'private') return p.visibility === 'private';
+    return true;
+  }
 
   // Filtered Room Posts
   let filteredRoomPosts = $derived.by(() => {
@@ -111,12 +122,7 @@
         (p.category || '').toLowerCase().includes(q);
 
       if (!matchSearch) return false;
-
-      if (statusFilter === 'published') {
-        if (p.draft || p.hidden || p.visibility === 'private') return false;
-      } else if (statusFilter === 'draft') {
-        if (!p.draft) return false;
-      }
+      if (!matchesStatus(p, statusFilter)) return false;
 
       if (selectedCategory !== 'all') {
         const cat = p.category || (p.categories && p.categories[0]) || '';
@@ -138,6 +144,7 @@
         (p.filename || '').toLowerCase().includes(q);
 
       if (!matchSearch) return false;
+      if (!matchesStatus(p, statusFilter)) return false;
 
       if (exodusTypeFilter !== 'all') {
         if (p.docType !== exodusTypeFilter) return false;
@@ -260,14 +267,14 @@
 
       <!-- Filters -->
       <div class="flex items-center gap-2">
+        <div class="w-28 sm:w-32">
+          <Dropdown
+            compact={true}
+            options={statusOptions}
+            bind:value={statusFilter}
+          />
+        </div>
         {#if activeScope === 'room'}
-          <div class="w-28 sm:w-32">
-            <Dropdown
-              compact={true}
-              options={statusOptions}
-              bind:value={statusFilter}
-            />
-          </div>
           {#if categoryOptions.length > 2}
             <div class="w-32 sm:w-36">
               <Dropdown
@@ -325,10 +332,16 @@
             >
               {post.title || post.slug}
             </a>
-            <div class="text-xs text-muted-foreground font-sans mt-0.5">
-              {formatDate(post.date || post.created_at)}
+            <div class="text-xs text-muted-foreground font-sans mt-0.5 flex items-center flex-wrap gap-x-1.5">
+              <span>{formatDate(post.date || post.created_at)}</span>
               {#if post.draft}
-                <span class="text-amber-600 dark:text-amber-400 ml-1.5">· Draft</span>
+                <span class="text-amber-600 dark:text-amber-400 font-medium">· Draft</span>
+              {/if}
+              {#if post.hidden}
+                <span class="text-purple-600 dark:text-purple-400 font-medium">· Unlisted</span>
+              {/if}
+              {#if post.visibility === 'private'}
+                <span class="text-rose-600 dark:text-rose-400 font-medium">· Private</span>
               {/if}
             </div>
           </div>
@@ -369,8 +382,17 @@
             >
               {page.title || page.filename}
             </a>
-            <div class="text-xs text-muted-foreground font-sans mt-0.5">
-              {formatDate(page.date)}
+            <div class="text-xs text-muted-foreground font-sans mt-0.5 flex items-center flex-wrap gap-x-1.5">
+              <span>{formatDate(page.date)}</span>
+              {#if page.draft}
+                <span class="text-amber-600 dark:text-amber-400 font-medium">· Draft</span>
+              {/if}
+              {#if page.hidden}
+                <span class="text-purple-600 dark:text-purple-400 font-medium">· Unlisted</span>
+              {/if}
+              {#if page.visibility === 'private'}
+                <span class="text-rose-600 dark:text-rose-400 font-medium">· Private</span>
+              {/if}
             </div>
           </div>
 

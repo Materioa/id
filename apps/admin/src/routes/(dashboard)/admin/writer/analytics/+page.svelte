@@ -72,37 +72,37 @@
   }
 </script>
 
-<div class="p-6 md:p-8 max-w-5xl mx-auto space-y-8 font-sans animate-in fade-in duration-300">
+<div class="p-4 sm:p-6 md:p-8 max-w-5xl mx-auto space-y-6 sm:space-y-8 font-sans animate-in fade-in duration-300">
   <!-- Header with Apple-style Range Switcher -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="flex items-center gap-3">
       <a
         href="/admin/writer"
-        class="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors"
+        class="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors shrink-0"
         title="Back"
       >
         <HugeiconsIcon icon={ArrowLeft02Icon} size={18} />
       </a>
       <div>
-        <h1 class="text-3xl font-serif font-normal tracking-tight text-foreground">
+        <h1 class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">
           Analytics
         </h1>
-        <p class="text-muted-foreground mt-1 text-sm font-sans">
+        <p class="text-muted-foreground mt-0.5 sm:mt-1 text-xs sm:text-sm font-sans">
           Readership and engagement metrics across articles.
         </p>
       </div>
     </div>
 
     <!-- Segmented Range Control -->
-    <div class="flex items-center gap-2">
+    <div class="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
       {#if isLoading}
-        <HugeiconsIcon icon={RefreshIcon} size={15} class="animate-spin text-muted-foreground mr-1" />
+        <HugeiconsIcon icon={RefreshIcon} size={15} class="animate-spin text-muted-foreground mr-1 shrink-0" />
       {/if}
-      <div class="flex items-center gap-1 p-1 bg-muted/40 rounded-xl text-xs">
+      <div class="flex items-center gap-1 p-1 bg-muted/40 rounded-xl text-xs w-full sm:w-auto justify-between sm:justify-start">
         {#each [7, 14, 30, 90] as d}
           <button
             onclick={() => selectDays(d)}
-            class="px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 {selectedDays === d ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+            class="flex-1 sm:flex-initial text-center px-3 sm:px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 {selectedDays === d ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
           >
             {d}d
           </button>
@@ -112,37 +112,37 @@
   </div>
 
   <!-- Key Metrics Row with instant reactivity -->
-  <div class="grid grid-cols-2 md:grid-cols-5 gap-6 pt-2 border-t border-border/50 {isLoading ? 'opacity-50 transition-opacity' : 'transition-opacity'}">
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 pt-2 border-t border-border/50 {isLoading ? 'opacity-50 transition-opacity' : 'transition-opacity'}">
     <div>
-      <div class="text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
+      <div class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
         <Scritto value={mTotalViews} />
       </div>
       <div class="text-xs text-muted-foreground font-sans mt-1">Total reads</div>
     </div>
 
     <div>
-      <div class="text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
+      <div class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
         <Scritto value={mTotalDuration} />
       </div>
       <div class="text-xs text-muted-foreground font-sans mt-1">Reading time</div>
     </div>
 
     <div>
-      <div class="text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
+      <div class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
         <Scritto value={mRetentionRate} />
       </div>
       <div class="text-xs text-muted-foreground font-sans mt-1">Retention (&gt;30s)</div>
     </div>
 
     <div>
-      <div class="text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
+      <div class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
         <Scritto value={mAvgCompletion} />
       </div>
       <div class="text-xs text-muted-foreground font-sans mt-1">Avg completion</div>
     </div>
 
-    <div>
-      <div class="text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
+    <div class="col-span-2 sm:col-span-1">
+      <div class="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground metric-scritto">
         <Scritto value={mTotalClaps} />
       </div>
       <div class="text-xs text-muted-foreground font-sans mt-1">Claps</div>
@@ -172,13 +172,13 @@
 
       <div class="border-t border-border/50 divide-y divide-border/40">
         {#each topPosts as p, idx}
-          <div class="py-3 flex items-center justify-between gap-3 sm:gap-4 group">
+          <div class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 group">
             <div class="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
               <span class="text-xs text-muted-foreground font-sans w-4 shrink-0">{idx + 1}</span>
               <div class="min-w-0 flex-1">
                 <button
                   onclick={() => (postForModal = { id: p.id, title: p.title || p.slug })}
-                  class="font-serif text-[16px] font-normal tracking-tight text-foreground hover:text-primary transition-colors truncate block text-left w-full"
+                  class="font-serif text-[15px] sm:text-[16px] font-normal tracking-tight text-foreground hover:text-primary transition-colors truncate block text-left w-full"
                 >
                   {p.title || p.slug}
                 </button>
@@ -186,12 +186,14 @@
               </div>
             </div>
 
-            <div class="flex items-center gap-2.5 sm:gap-4 text-xs font-sans shrink-0">
-              <span class="text-muted-foreground">{p.views || 0} reads</span>
-              <span class="text-muted-foreground hidden xs:inline">{formatDuration(p.totalDuration || p.duration || 0)}</span>
+            <div class="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 text-xs font-sans shrink-0 pl-6 sm:pl-0">
+              <div class="flex items-center gap-3 text-muted-foreground">
+                <span>{p.views || 0} reads</span>
+                <span>{formatDuration(p.totalDuration || p.duration || 0)}</span>
+              </div>
               <button
                 onclick={() => (postForModal = { id: p.id, title: p.title || p.slug })}
-                class="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors"
+                class="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors ml-auto sm:ml-0"
                 title="Telemetry details"
               >
                 <HugeiconsIcon icon={Analytics01Icon} size={15} />

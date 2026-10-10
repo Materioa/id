@@ -47,7 +47,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
           hidden: post.hidden
         },
         hidden: post.hidden,
-        draft: post.draft
+        draft: post.draft,
+        visibility: post.visibility || 'public'
       },
       versions: [],
       scope: 'exodus',
@@ -73,7 +74,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
     const rawVersions = await versionsCollection
       .find({ post_id: row._id })
       .sort({ version_saved_at: -1 })
-      .limit(30)
+      .limit(10)
       .toArray();
 
     versions = rawVersions.map((v) => ({
