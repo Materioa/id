@@ -35,7 +35,7 @@ export const GET: RequestHandler = async ({ url, cookies, request, fetch }) => {
 
   if (id) {
     if (id.startsWith('exodus:')) {
-      const post = getExodusPostById(id, true);
+      const post = await getExodusPostById(id, true);
       if (!post) return json({ error: 'Exodus post not found' }, { status: 404, headers: corsHeaders });
       return json({ post }, { headers: corsHeaders });
     }

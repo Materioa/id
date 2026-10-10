@@ -25,7 +25,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
   // Handle Exodus ID
   if (id.startsWith('exodus:')) {
-    const exodusPost = getExodusPostById(id, true);
+    const exodusPost = await getExodusPostById(id, true);
     if (!exodusPost) throw error(404, 'Exodus document not found');
     return {
       post: {

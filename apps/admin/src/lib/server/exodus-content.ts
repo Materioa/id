@@ -3,7 +3,7 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import { env } from '$env/dynamic/private';
 import { slugify, extractPostImagesList } from './insightroom-posts';
-import { getInsightroomDb } from './mongo';
+import { getDb, getInsightroomDb } from './mongo';
 
 export type ExodusDocType = 'changelog' | 'doc' | 'legal';
 
@@ -26,12 +26,19 @@ export interface ExodusPost {
   url: string;
   content?: string;
   metadata: Record<string, any>;
-  filePath: string;
+  filePath?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function getExodusCollection() {
+  const db = await getDb('materio');
+  return db.collection('exodus_posts');
 }
 
 export function getExodusRoot(): string {
   const custom = env.EXODUS_PATH || process.env.EXODUS_PATH;
-  if (custom && fs.existsSync(custom)) return path.resolve(custom);
+  if (custom && fs?.existsSync && fs.existsSync(custom)) return path.resolve(custom);
 
   const candidates = [
     'D:/v4/v5/project-exodus',
@@ -42,9 +49,11 @@ export function getExodusRoot(): string {
   ];
 
   for (const cand of candidates) {
-    if (fs.existsSync(cand) && fs.existsSync(path.join(cand, 'src'))) {
-      return path.resolve(cand);
-    }
+    try {
+      if (fs?.existsSync && fs.existsSync(cand) && fs.existsSync(path.join(cand, 'src'))) {
+        return path.resolve(cand);
+      }
+    } catch {}
   }
 
   return 'D:/v4/v5/project-exodus';
@@ -58,121 +67,86 @@ export function getExodusPagesDir(): string {
   return path.join(getExodusRoot(), 'src', 'pages');
 }
 
-export function parseExodusFile(filePath: string, isPage: boolean, includeContent: boolean = false): ExodusPost | null {
-  if (!fs.existsSync(filePath)) return null;
+function mapDocToExodusPost(doc: any, includeContent: boolean = false): ExodusPost {
+  const isPage = doc.docType === 'legal';
+  const filename = doc.filename || `${doc.slug}.md`;
+  const id = doc.id || `exodus:${isPage ? 'page' : 'post'}:${filename}`;
+  const metadata = doc.metadata || {};
 
-  try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const { data: metadata, content } = matter(raw);
-    const filename = path.basename(filePath);
-
-    let slug = filename.replace(/\.md$/, '');
-    const dateMatch = filename.match(/^(\d{4}-\d{2}-\d{2})-(.+)\.md$/);
-    let postDate = metadata.date;
-
-    if (dateMatch) {
-      if (!postDate) postDate = dateMatch[1];
-      slug = dateMatch[2];
-    }
-
-    const category = metadata.category || '';
-    const categories = Array.isArray(metadata.categories) ? metadata.categories : [];
-
-    let docType: ExodusDocType = 'doc';
-    if (isPage || category === 'legal') {
-      docType = 'legal';
-    } else if (category === 'whats-new' || categories.includes('whats-new') || category.toLowerCase().includes('changelog')) {
-      docType = 'changelog';
-    }
-
-    let url = isPage ? (metadata.permalink || `/${slug}`) : (metadata.permalink || `/posts/${slug}`);
-    if (docType === 'changelog') {
-      url = `/changelog#${slug}`;
-    }
-
-    const id = `exodus:${isPage ? 'page' : 'post'}:${filename}`;
-
-    return {
-      id,
-      scope: 'exodus',
-      docType,
-      filename,
-      title: metadata.title || slug,
-      slug,
-      date: postDate ? String(postDate).split('T')[0] : undefined,
-      category: category || (isPage ? 'legal' : docType === 'changelog' ? 'whats-new' : 'docs'),
-      categories,
-      excerpt: metadata.excerpt || '',
-      image: metadata.image || metadata.cover || '',
-      images: extractPostImagesList({
-        image: metadata.image || metadata.cover,
-        metadata,
-        content
-      }),
-      draft: Boolean(metadata.draft),
-      hidden: Boolean(metadata.hidden),
-      visibility: metadata.visibility || 'public',
-      url,
-      ...(includeContent ? { content } : {}),
-      metadata: JSON.parse(JSON.stringify(metadata)),
-      filePath
-    };
-  } catch (err) {
-    console.error(`[Exodus Content] Failed to parse ${filePath}:`, err);
-    return null;
-  }
+  return {
+    id,
+    scope: 'exodus',
+    docType: (doc.docType as ExodusDocType) || 'doc',
+    filename,
+    title: doc.title || metadata.title || doc.slug,
+    slug: doc.slug,
+    date: doc.date ? String(doc.date).split('T')[0] : undefined,
+    category: doc.category || (isPage ? 'legal' : doc.docType === 'changelog' ? 'whats-new' : 'docs'),
+    categories: Array.isArray(doc.categories) ? doc.categories : metadata.categories || [],
+    excerpt: doc.excerpt || metadata.excerpt || '',
+    image: doc.image || metadata.image || metadata.cover || '',
+    images: extractPostImagesList({
+      image: doc.image || metadata.image || metadata.cover,
+      metadata,
+      content: doc.content
+    }),
+    draft: Boolean(doc.draft ?? metadata.draft),
+    hidden: Boolean(doc.hidden ?? metadata.hidden),
+    visibility: doc.visibility || metadata.visibility || 'public',
+    url: doc.url || (isPage ? `/${doc.slug}` : doc.docType === 'changelog' ? `/changelog#${doc.slug}` : `/posts/${doc.slug}`),
+    ...(includeContent ? { content: doc.content || '' } : {}),
+    metadata,
+    filePath: doc.filePath || filename,
+    created_at: doc.created_at ? new Date(doc.created_at).toISOString() : undefined,
+    updated_at: doc.updated_at ? new Date(doc.updated_at).toISOString() : undefined
+  };
 }
 
 export async function getAllExodusPosts(options: { type?: 'all' | 'changelog' | 'doc' | 'legal'; content?: boolean } = {}): Promise<ExodusPost[]> {
-  const results: ExodusPost[] = [];
-  const postsDir = getExodusPostsDir();
-  const pagesDir = getExodusPagesDir();
-
-  // Read src/posts
-  if (fs.existsSync(postsDir)) {
-    const postFiles = fs.readdirSync(postsDir).filter((f) => f.endsWith('.md'));
-    for (const f of postFiles) {
-      const parsed = parseExodusFile(path.join(postsDir, f), false, Boolean(options.content));
-      if (parsed) {
-        if (!options.type || options.type === 'all' || parsed.docType === options.type) {
-          results.push(parsed);
-        }
-      }
+  try {
+    const col = await getExodusCollection();
+    const query: Record<string, any> = {};
+    if (options.type && options.type !== 'all') {
+      query.docType = options.type;
     }
-  }
 
-  // Read src/pages (legal, about, etc.)
-  if (fs.existsSync(pagesDir)) {
-    const pageFiles = fs.readdirSync(pagesDir).filter((f) => f.endsWith('.md'));
-    for (const f of pageFiles) {
-      const parsed = parseExodusFile(path.join(pagesDir, f), true, Boolean(options.content));
-      if (parsed) {
-        if (!options.type || options.type === 'all' || options.type === 'legal') {
-          results.push(parsed);
-        }
-      }
+    const projection: Record<string, any> = {};
+    if (!options.content) {
+      projection.content = 0;
     }
-  }
 
-  return results.sort((a, b) => {
-    const dateA = a.date ? new Date(a.date).getTime() : 0;
-    const dateB = b.date ? new Date(b.date).getTime() : 0;
-    return dateB - dateA;
-  });
+    const docs = await col.find(query, { projection }).sort({ date: -1, _id: -1 }).toArray();
+
+    return docs.map((doc) => mapDocToExodusPost(doc, Boolean(options.content)));
+  } catch (err) {
+    console.error('[Exodus Content] Error in getAllExodusPosts from Mongo:', err);
+    return [];
+  }
 }
 
-export function getExodusPostById(id: string, includeContent: boolean = true): ExodusPost | null {
-  const parts = id.split(':');
-  if (parts[0] !== 'exodus') return null;
+export async function getExodusPostById(id: string, includeContent: boolean = true): Promise<ExodusPost | null> {
+  if (!id) return null;
 
-  const kind = parts[1]; // 'post' or 'page'
-  const filename = parts[2];
-  if (!filename) return null;
+  try {
+    const col = await getExodusCollection();
+    let query: Record<string, any>;
 
-  const dir = kind === 'page' ? getExodusPagesDir() : getExodusPostsDir();
-  const filePath = path.join(dir, filename);
+    if (id.startsWith('exodus:')) {
+      const parts = id.split(':');
+      const filename = parts[2];
+      query = { $or: [{ id }, { filename }] };
+    } else {
+      query = { $or: [{ id }, { filename: id }, { slug: id }] };
+    }
 
-  return parseExodusFile(filePath, kind === 'page', includeContent);
+    const doc = await col.findOne(query);
+    if (!doc) return null;
+
+    return mapDocToExodusPost(doc, includeContent);
+  } catch (err) {
+    console.error(`[Exodus Content] Error in getExodusPostById for ${id}:`, err);
+    return null;
+  }
 }
 
 export async function saveExodusPost(payload: {
@@ -191,21 +165,12 @@ export async function saveExodusPost(payload: {
   if (!slug) slug = slugify(title);
 
   let isPage = docType === 'legal';
-  let targetDir = isPage ? getExodusPagesDir() : getExodusPostsDir();
-
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
-  }
-
   let filename = '';
-  let existingFilePath = '';
 
   if (id && id.startsWith('exodus:')) {
     const parts = id.split(':');
     isPage = parts[1] === 'page';
-    targetDir = isPage ? getExodusPagesDir() : getExodusPostsDir();
     filename = parts[2];
-    existingFilePath = path.join(targetDir, filename);
   }
 
   const dateStr = metadata.date || new Date().toISOString().split('T')[0];
@@ -218,33 +183,39 @@ export async function saveExodusPost(payload: {
     }
   }
 
-  const finalFilePath = path.join(targetDir, filename);
+  const newId = `exodus:${isPage ? 'page' : 'post'}:${filename}`;
 
-  // Backup / save old version in mongo post_versions if updating
-  if (existingFilePath && fs.existsSync(existingFilePath)) {
-    try {
-      const oldRaw = fs.readFileSync(existingFilePath, 'utf-8');
-      const { data: oldMeta, content: oldContent } = matter(oldRaw);
-      const db = await getInsightroomDb();
-      await db.collection('post_versions').insertOne({
+  // 1. Save version snapshot to Mongo post_versions
+  try {
+    const prevPost = id ? await getExodusPostById(id, true) : null;
+    if (prevPost) {
+      const insightroomDb = await getInsightroomDb();
+      await insightroomDb.collection('post_versions').insertOne({
         exodus_file: filename,
         scope: 'exodus',
-        title: oldMeta.title || title,
-        content: oldContent,
-        metadata: oldMeta,
+        title: prevPost.title || title,
+        content: prevPost.content || '',
+        metadata: prevPost.metadata || {},
         updated_at: new Date(),
         saved_by_name: savedByName || 'Admin',
         saved_by_avatar: savedByAvatar || '',
         version_saved_at: new Date()
       });
-    } catch (e) {
-      console.warn('[Exodus Post Version Backup Warning]:', e);
     }
+  } catch (backupErr) {
+    console.warn('[Exodus Post Version Backup Warning]:', backupErr);
   }
 
-  // Construct Frontmatter
+  // 2. Construct clean frontmatter and URL
   const finalCategory =
     metadata.category || (docType === 'changelog' ? 'whats-new' : docType === 'legal' ? 'legal' : 'docs');
+
+  const categories = docType === 'changelog' ? ['whats-new'] : Array.isArray(metadata.categories) ? metadata.categories : [];
+
+  let url = isPage ? (metadata.permalink || `/${slug}`) : (metadata.permalink || `/posts/${slug}`);
+  if (docType === 'changelog') {
+    url = `/changelog#${slug}`;
+  }
 
   const frontmatter: Record<string, any> = {
     title,
@@ -252,7 +223,7 @@ export async function saveExodusPost(payload: {
     ...(metadata.excerpt ? { excerpt: metadata.excerpt } : {}),
     ...(metadata.image ? { image: metadata.image } : {}),
     category: finalCategory,
-    ...(docType === 'changelog' ? { categories: ['whats-new'] } : {}),
+    ...(categories.length > 0 ? { categories } : {}),
     ...(isPage ? { permalink: metadata.permalink || `/${slug}` } : {}),
     date: dateStr,
     ...(metadata.draft !== undefined ? { draft: Boolean(metadata.draft) } : {}),
@@ -264,24 +235,90 @@ export async function saveExodusPost(payload: {
 
   delete frontmatter.categories_list;
 
-  const fileString = matter.stringify(content || '', frontmatter);
-  fs.writeFileSync(finalFilePath, fileString, 'utf-8');
+  const coverImage = metadata.image || metadata.cover || '';
+  const images = extractPostImagesList({
+    image: coverImage,
+    metadata: frontmatter,
+    content
+  });
 
-  const newId = `exodus:${isPage ? 'page' : 'post'}:${filename}`;
-  return { success: true, id: newId, filePath: finalFilePath };
+  // 3. Upsert into MongoDB materio.exodus_posts
+  const col = await getExodusCollection();
+  const mongoDoc = {
+    id: newId,
+    scope: 'exodus',
+    docType,
+    filename,
+    title,
+    slug,
+    date: dateStr,
+    category: finalCategory,
+    categories,
+    excerpt: metadata.excerpt || '',
+    image: coverImage,
+    images,
+    draft: Boolean(metadata.draft),
+    hidden: Boolean(metadata.hidden),
+    visibility: metadata.visibility || 'public',
+    url,
+    content: content || '',
+    metadata: JSON.parse(JSON.stringify(frontmatter)),
+    updated_at: new Date()
+  };
+
+  await col.updateOne(
+    { filename },
+    {
+      $set: mongoDoc,
+      $setOnInsert: { created_at: new Date() }
+    },
+    { upsert: true }
+  );
+
+  // 4. If running locally with local filesystem present, also update local file so git stays in sync
+  try {
+    const root = getExodusRoot();
+    if (fs?.existsSync && fs.existsSync(root)) {
+      const targetDir = isPage ? getExodusPagesDir() : getExodusPostsDir();
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      const finalFilePath = path.join(targetDir, filename);
+      const fileString = matter.stringify(content || '', frontmatter);
+      fs.writeFileSync(finalFilePath, fileString, 'utf-8');
+    }
+  } catch (fsErr) {
+    // Expected on Cloudflare Workers / serverless edge environments
+  }
+
+  return { success: true, id: newId, filePath: filename };
 }
 
 export async function deleteExodusPost(id: string): Promise<{ success: boolean }> {
+  if (!id) throw new Error('Invalid Exodus post ID');
+
   const parts = id.split(':');
-  if (parts[0] !== 'exodus') throw new Error('Invalid Exodus post ID');
+  const filename = parts.length >= 3 ? parts[2] : id;
 
-  const kind = parts[1];
-  const filename = parts[2];
-  const dir = kind === 'page' ? getExodusPagesDir() : getExodusPostsDir();
-  const filePath = path.join(dir, filename);
+  // 1. Delete from MongoDB
+  const col = await getExodusCollection();
+  await col.deleteOne({
+    $or: [{ id }, { filename }, { slug: id }]
+  });
 
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
+  // 2. If running locally with local disk present, remove file
+  try {
+    const root = getExodusRoot();
+    if (fs?.existsSync && fs.existsSync(root)) {
+      const isPage = parts[1] === 'page';
+      const dir = isPage ? getExodusPagesDir() : getExodusPostsDir();
+      const filePath = path.join(dir, filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+  } catch (fsErr) {
+    // Expected in Cloudflare Workers
   }
 
   return { success: true };

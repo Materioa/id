@@ -21,7 +21,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 
   // Check if it's an Exodus post
   if (id.startsWith('exodus:') || reqScope === 'exodus') {
-    const post = getExodusPostById(id, true);
+    const post = await getExodusPostById(id, true);
     if (!post) {
       throw error(404, 'Exodus document not found');
     }

@@ -500,10 +500,10 @@ async function handleToolCall(name: string, args: any, currentUser: any, request
       let post: any = null;
 
       if (id && id.startsWith('exodus:')) {
-        post = getExodusPostById(id, true);
+        post = await getExodusPostById(id, true);
       } else if (scope === 'exodus') {
         if (id) {
-          post = getExodusPostById(id, true);
+          post = await getExodusPostById(id, true);
         } else if (slug) {
           const allExodus = await getAllExodusPosts({ content: true });
           post = allExodus.find((p) => p.slug === slug || p.filename === slug);
