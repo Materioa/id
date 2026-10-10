@@ -732,16 +732,21 @@
       aria-label="Close settings"
     ></button>
 
-    <div class="w-full md:max-w-sm bg-card border-t md:border-t-0 md:border-l border-border rounded-t-2xl md:rounded-none max-h-[88vh] md:h-full flex flex-col p-5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 font-sans shadow-2xl">
-      <!-- Mobile grab handle -->
-      <div class="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto -mt-2 mb-1 md:hidden"></div>
-
-      <div class="flex items-center justify-between pb-3 border-b border-border/50 shrink-0">
-        <h2 class="text-base font-serif font-normal text-foreground">Settings</h2>
-        <button onclick={() => (showSettingsDrawer = false)} class="p-1 text-muted-foreground hover:text-foreground">
-          <HugeiconsIcon icon={Cancel01Icon} size={16} />
-        </button>
+    <div class="w-full max-w-sm sm:max-w-md bg-card border-t md:border-t-0 md:border-l border-border rounded-t-2xl md:rounded-none h-[90dvh] md:h-dvh max-h-dvh flex flex-col overflow-hidden font-sans shadow-2xl">
+      <!-- Fixed Header -->
+      <div class="px-5 pt-4 pb-3 border-b border-border/50 shrink-0 bg-card">
+        <!-- Mobile grab handle -->
+        <div class="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto -mt-1 mb-2 md:hidden"></div>
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-serif font-normal text-foreground">Settings</h2>
+          <button onclick={() => (showSettingsDrawer = false)} class="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors">
+            <HugeiconsIcon icon={Cancel01Icon} size={16} />
+          </button>
+        </div>
       </div>
+
+      <!-- Scrollable Form Body -->
+      <div class="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5 font-sans">
 
       <!-- Slug -->
       <div class="space-y-1">
@@ -945,7 +950,10 @@
         </div>
       </div>
 
-      <div class="pt-4">
+      </div>
+
+      <!-- Pinned Footer -->
+      <div class="p-4 border-t border-border/50 shrink-0 bg-card/95 backdrop-blur-xs">
         <button
           onclick={() => (showSettingsDrawer = false)}
           class="w-full btn-base btn-primary text-xs py-2"
@@ -968,7 +976,7 @@
       aria-label="Close revisions"
     ></button>
 
-    <div class="w-full md:max-w-lg bg-card border-t md:border-t-0 md:border-l border-border rounded-t-2xl md:rounded-none max-h-[88vh] md:h-full flex flex-col p-5 sm:p-6 overflow-hidden font-sans shadow-2xl">
+    <div class="w-full md:max-w-lg bg-card border-t md:border-t-0 md:border-l border-border rounded-t-2xl md:rounded-none h-[90dvh] md:h-dvh max-h-dvh flex flex-col p-5 sm:p-6 overflow-hidden font-sans shadow-2xl">
       <!-- Mobile grab handle -->
       <div class="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto -mt-2 mb-1 md:hidden"></div>
 
