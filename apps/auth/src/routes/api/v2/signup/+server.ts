@@ -8,6 +8,7 @@ import {
   generateHandoffCode,
   storeHandoffCode
 } from '$lib/server/utils';
+import { parseProfilePictureDataUri, generateDicebearAvatarUrl, detectGender } from '$lib/avatar';
 
 export async function POST({ request, getClientAddress }: RequestEvent) {
   try {
@@ -27,7 +28,6 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
       specialization
     } = body;
 
-    const hasInlineProfilePicture = typeof profilePicture === 'string' && profilePicture.startsWith('data:image');
 
     if (!username || !displayName || !email || !password || !otp) {
       return json({ error: 'Missing required fields including verification code' }, { status: 400 });
@@ -97,7 +97,18 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
     const recoveryKey = generateRecoveryKey();
     const hashedPassword = await hashPassword(password);
     
-    const fallbackAvatarUrl = "https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random&size=128&bold=true";
+    const userGender = detectGender(displayName);
+    const fallbackDicebearUrl = generateDicebearAvatarUrl({
+      seed: username || displayName || 'User',
+      gender: userGender,
+      size: 128
+    });
+
+    const isRemoteUrl = typeof profilePicture === 'string' && (profilePicture.startsWith('http://') || profilePicture.startsWith('https://'));
+    const isInlineUpload = typeof profilePicture === 'string' && profilePicture.startsWith('data:image');
+
+    // Prioritize Dicebear CDN URL (or remote URL) directly
+    const effectiveProfilePic = isRemoteUrl ? profilePicture : fallbackDicebearUrl;
     
     const userData = {
       username,
@@ -112,7 +123,7 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
       passout_year: passoutYear,
       specialization: specialization,
       university_roll_no: normalizedEmail.split('@')[0],
-      profile_picture: hasInlineProfilePicture ? profilePicture : fallbackAvatarUrl.replace('"', '').replace('"', ''),
+      profile_picture: effectiveProfilePic,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -136,43 +147,39 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
         .eq('id', validInvite.id);
     }
 
-    // STEP 4: Handle profile picture upload if provided
+    // STEP 4: Only upload to Supabase storage if user provided an inline device file upload (data:image)
     let finalProfilePic = userData.profile_picture;
-    if (hasInlineProfilePicture) {
-      try {
-        const base64Data = profilePicture.split(',')[1];
-        const mimeType = profilePicture.match(/data:(.*?);base64/)?.[1] || 'image/png';
-        let fileExt = 'png';
-        if (mimeType.includes('svg')) fileExt = 'svg';
-        else if (mimeType.includes('jpeg')) fileExt = 'jpeg';
-        else if (mimeType.includes('jpg')) fileExt = 'jpg';
-        else if (mimeType.includes('webp')) fileExt = 'webp';
-        
-        const fileName = "${newUser.id}/profile.${fileExt}".replace('"', '').replace('"', '');
-        const bufferData = Buffer.from(base64Data, 'base64');
-        
-        const { data: uploadData, error: uploadError } = await supabaseAdmin
-          .storage
-          .from('profile-pictures')
-          .upload(fileName, bufferData, {
-            contentType: mimeType,
-            upsert: true
-          });
-
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabaseAdmin
+    if (isInlineUpload) {
+      const parsedImage = parseProfilePictureDataUri(profilePicture);
+      if (parsedImage) {
+        try {
+          const fileName = `${newUser.id}/profile.${parsedImage.extension}`;
+          
+          const { error: uploadError } = await supabaseAdmin
             .storage
             .from('profile-pictures')
-            .getPublicUrl(fileName);
+            .upload(fileName, parsedImage.buffer, {
+              contentType: parsedImage.mimeType,
+              upsert: true
+            });
 
-          finalProfilePic = publicUrl;
-          await supabaseAdmin
-            .from('users')
-            .update({ profile_picture: finalProfilePic })
-            .eq('id', newUser.id);
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabaseAdmin
+              .storage
+              .from('profile-pictures')
+              .getPublicUrl(fileName);
+
+            finalProfilePic = publicUrl;
+            await supabaseAdmin
+              .from('users')
+              .update({ profile_picture: finalProfilePic })
+              .eq('id', newUser.id);
+          } else {
+            console.error('Profile picture storage upload error:', uploadError);
+          }
+        } catch (error) {
+          console.error('Profile picture upload error:', error);
         }
-      } catch (error) {
-        console.error('Profile picture upload error:', error);
       }
     }
 

@@ -193,7 +193,7 @@ export async function GET({ params, url, request, getClientAddress, cookies }: R
       const randomSecret = crypto.randomUUID() + crypto.randomBytes(32).toString('hex');
       const hashedPassword = await hashPassword(randomSecret);
       const recoveryKey = generateRecoveryKey();
-      const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName || username)}&background=random&size=128&bold=true`;
+      const fallbackAvatar = `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(displayName || username || 'User')}&backgroundColor=FDFBF7,F5F0E6`;
 
       const newUserPayload: any = {
         id: crypto.randomUUID(),

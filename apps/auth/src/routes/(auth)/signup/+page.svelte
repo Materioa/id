@@ -9,8 +9,7 @@
   import Checkbox from '$lib/components/Checkbox.svelte';
   import Dropdown from '$lib/components/Dropdown.svelte';
   import { Eye, EyeOff } from 'lucide-svelte';
-  import { createAvatar } from '@dicebear/core';
-  import { lorelei } from '@dicebear/collection';
+  import { detectGender, generateDicebearAvatarUrl, type Gender } from '$lib/avatar';
 
   // State
   let step = $state('registration'); // 'registration' | 'verification'
@@ -52,20 +51,38 @@
     }
   }
 
-  // Avatar logic
-  let randomSeed = $state('');
-  
+  // Avatar logic with stable random seed (doesn't jitter/shuffle on keystrokes)
+  let avatarSeed = $state(Math.random().toString(36).substring(2, 10));
+  let shuffleCount = $state(0);
+
+  // Auto-detected gender from displayName
+  let autoGender = $derived(detectGender(displayName));
+
+  // Starts with name-matched style; clicking shuffle explores all styles freely without blocking
+  let currentGender = $derived.by<Gender>(() => {
+    if (shuffleCount === 0) {
+      return autoGender !== 'unknown' ? autoGender : 'all';
+    }
+    const pool: Gender[] = autoGender === 'female' 
+      ? ['female', 'all', 'male'] 
+      : autoGender === 'male' 
+        ? ['male', 'all', 'female'] 
+        : ['all', 'male', 'female'];
+    return pool[shuffleCount % pool.length];
+  });
+
   function shuffleAvatar() {
-    randomSeed = Math.random().toString(36).substring(7);
+    avatarSeed = Math.random().toString(36).substring(2, 10);
+    shuffleCount++;
   }
 
+  // Generates prioritized high-speed Dicebear CDN URL
   let dicebearAvatar = $derived(
-    createAvatar(lorelei, {
-      seed: randomSeed || displayName || username || 'User',
-      size: 128,
-      radius: 0,
-      backgroundColor: ["FDFBF7", "F5F0E6"]
-    }).toDataUri()
+    generateDicebearAvatarUrl({
+      seed: avatarSeed,
+      gender: currentGender,
+      size: 128
+    })
   );
 
   // Auto-calculate passout year
@@ -219,7 +236,7 @@
           passoutYear: parseInt(passoutYear),
           specialization,
           otp: otpCode,
-          profilePicture: profilePicture || ''
+          profilePicture: profilePicture || dicebearAvatar
         })
       });
 

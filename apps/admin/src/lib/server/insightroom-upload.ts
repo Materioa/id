@@ -187,7 +187,7 @@ export async function uploadBufferToCloudinary(buffer: Buffer, filename: string)
   const signature = await sha1Hex(paramsToSign);
 
   const formData = new FormData();
-  formData.append('file', new Blob([buffer]), filename);
+  formData.append('file', new Blob([buffer as any]), filename);
   formData.append('api_key', api_key);
   formData.append('timestamp', String(timestamp));
   formData.append('folder', folder);

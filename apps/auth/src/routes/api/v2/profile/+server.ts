@@ -174,10 +174,12 @@ export async function PUT({ request }: RequestEvent) {
     const isProfilePictureUpdateRequest = typeof profilePicture === 'string' && profilePicture.length > 0 && profilePicture !== user.profile_picture;
 
     if (isProfilePictureUpdateRequest) {
-      if (!profilePicture.startsWith('data:image')) {
+      if (profilePicture.startsWith('http://') || profilePicture.startsWith('https://')) {
+        updateData.profile_picture = profilePicture;
+      } else if (!profilePicture.startsWith('data:image')) {
         return json({ error: 'Invalid profile picture format' }, { status: 400 });
-      }
-      try {
+      } else {
+        try {
         const mimeTypeMatch = profilePicture.match(/data:(.*?);/);
         const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
         
@@ -219,6 +221,7 @@ export async function PUT({ request }: RequestEvent) {
         return json({ error: 'Profile picture processing failed', details: error.message }, { status: 500 });
       }
     }
+  }
 
     if (Object.keys(updateData).length > 0) {
       updateData.updated_at = new Date().toISOString();

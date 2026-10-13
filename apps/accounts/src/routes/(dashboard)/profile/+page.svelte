@@ -23,8 +23,7 @@
   import { addToast } from "$lib/stores/toast";
   import Modal from "$lib/components/Modal.svelte";
   import { goto } from "$app/navigation";
-  import { createAvatar } from "@dicebear/core";
-  import { lorelei } from "@dicebear/collection";
+  import { detectGender, generateDicebearAvatarUrl, type Gender } from "$lib/avatar";
   import { userStore } from "$lib/stores/user.svelte";
   import { pageCache } from "$lib/stores/cache";
 
@@ -57,25 +56,39 @@
   // Edit Mode state
   let isEditing = $state(false);
 
-  let randomSeed = $state("");
+  let avatarSeed = $state(Math.random().toString(36).substring(2, 10));
+  let shuffleCount = $state(0);
+
+  let autoGender = $derived(detectGender(displayName || user.displayName));
+
+  let currentGender = $derived.by<Gender>(() => {
+    if (shuffleCount === 0) {
+      return autoGender !== 'unknown' ? autoGender : 'all';
+    }
+    const pool: Gender[] = autoGender === 'female' 
+      ? ['female', 'all', 'male'] 
+      : autoGender === 'male' 
+        ? ['male', 'all', 'female'] 
+        : ['all', 'male', 'female'];
+    return pool[shuffleCount % pool.length];
+  });
 
   function shuffleAvatar() {
-    randomSeed = Math.random().toString(36).substring(7);
-    newProfilePicture = createAvatar(lorelei, {
-      seed: randomSeed,
-      size: 128,
-      radius: 0,
-      backgroundColor: ["FDFBF7", "F5F0E6"],
-    }).toDataUri();
+    avatarSeed = Math.random().toString(36).substring(2, 10);
+    shuffleCount++;
+    newProfilePicture = generateDicebearAvatarUrl({
+      seed: avatarSeed,
+      gender: currentGender,
+      size: 128
+    });
   }
 
   let dicebearAvatar = $derived(
-    createAvatar(lorelei, {
-      seed: displayName || username || "User",
-      size: 128,
-      radius: 0,
-      backgroundColor: ["FDFBF7", "F5F0E6"],
-    }).toDataUri(),
+    generateDicebearAvatarUrl({
+      seed: avatarSeed,
+      gender: currentGender,
+      size: 128
+    })
   );
 
   onMount(async () => {

@@ -1,4 +1,4 @@
-<svelte:head>
+u<svelte:head>
   <title>Overview</title>
   <script src="/chart.umd.js"></script>
 </svelte:head>
