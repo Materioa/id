@@ -15,7 +15,6 @@
     Delete02Icon,
     Time04Icon,
     Settings02Icon,
-    SparklesIcon,
     Heading01Icon,
     TextBoldIcon,
     TextItalicIcon,
@@ -88,18 +87,12 @@
   // Drawers
   let showSettingsDrawer = $state(false);
   let showHistoryDrawer = $state(false);
-  let showOutlineModal = $state(false);
 
   // History
   let versions = $state(data.versions || []);
   let selectedVersion = $state<any | null>(null);
   let diffResults = $state<{ type: 'added' | 'removed' | 'same'; text: string }[]>([]);
   let diffStats = $state({ additions: 0, deletions: 0 });
-
-  // Outline tool
-  let outlineTopic = $state('');
-  let isGeneratingOutline = $state(false);
-  let generatedOutline = $state('');
 
   // Upload state
   let isUploadingMedia = $state(false);
@@ -154,7 +147,15 @@
 
   let renderedHtml = $derived.by(() => {
     try {
-      const processed = processVideoShortcodes(content || '');
+      let text = content || '';
+      // When an image/video is already set as the post cover, prevent it from rendering twice in content body
+      if (image && image.trim() && image !== 'artifact') {
+        const cleanImg = image.trim();
+        const escaped = cleanImg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        text = text.replace(new RegExp(`!\\[[^\\]]*\\]\\(${escaped}\\)\\s*`, 'g'), '');
+        text = text.replace(new RegExp(`\\[video:${escaped}(?::cover)?\\]\\s*`, 'g'), '');
+      }
+      const processed = processVideoShortcodes(text);
       return markedInstance.parse(processed) as string;
     } catch {
       return '<p class="text-destructive">Error rendering preview.</p>';
@@ -242,20 +243,17 @@
       if (isCover) {
         image = resData.url;
         addToast(`${isVid ? 'Video' : 'Cover image'} updated`, 'success');
+      } else if (shouldBeCover) {
+        // When auto-added as cover, set as cover without duplicating into body content
+        image = resData.url;
+        addToast(`${isVid ? 'Video' : 'Image'} set as cover`, 'success');
       } else {
         if (isVid) {
-          insertFormatting(shouldBeCover ? `\n[video:${resData.url}:cover]\n` : `\n[video:${resData.url}]\n`);
+          insertFormatting(`\n[video:${resData.url}]\n`);
         } else {
           insertFormatting(`\n![${file.name}](${resData.url})\n`);
         }
-
-        // If no cover image exists yet, make this first uploaded media the cover
-        if (shouldBeCover) {
-          image = resData.url;
-          addToast(`${isVid ? 'Video' : 'Image'} inserted & set as cover`, 'success');
-        } else {
-          addToast(`${isVid ? 'Video' : 'Image'} inserted`, 'success');
-        }
+        addToast(`${isVid ? 'Video' : 'Image'} inserted`, 'success');
       }
       markDirty();
     } catch (err: any) {
@@ -435,35 +433,6 @@
     addToast('Restored content from revision', 'success');
   }
 
-  async function generateOutline() {
-    if (!outlineTopic.trim()) return;
-    isGeneratingOutline = true;
-    try {
-      const res = await fetch('/api/admin/outline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: outlineTopic })
-      });
-      const data = (await res.json()) as any;
-      if (!res.ok) throw new Error(data.error || 'Failed to generate outline');
-      generatedOutline = data.outline || '';
-    } catch (err: any) {
-      addToast(err.message || 'Error generating outline', 'error');
-    } finally {
-      isGeneratingOutline = false;
-    }
-  }
-
-  function insertGeneratedOutline() {
-    if (!generatedOutline) return;
-    content = (content ? content + '\n\n' : '') + generatedOutline;
-    markDirty();
-    showOutlineModal = false;
-    generatedOutline = '';
-    outlineTopic = '';
-    addToast('Outline inserted', 'success');
-  }
-
   function handleKeyDown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
@@ -543,13 +512,6 @@
 
     <!-- Right: Tool Icon Buttons & Save -->
     <div class="flex items-center gap-1">
-      <button
-        onclick={() => (showOutlineModal = true)}
-        class="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors"
-        title="Outline assistant"
-      >
-        <HugeiconsIcon icon={SparklesIcon} size={17} />
-      </button>
 
       {#if scope === 'room' && id !== 'new'}
         <button
@@ -666,13 +628,6 @@
 
       <!-- Action Tools -->
       <div class="flex items-center gap-0.5">
-        <button
-          onclick={() => (showOutlineModal = true)}
-          class="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-colors"
-          title="Outline assistant"
-        >
-          <HugeiconsIcon icon={SparklesIcon} size={16} />
-        </button>
 
         {#if scope === 'room' && id !== 'new'}
           <button
@@ -1163,60 +1118,4 @@
   </div>
 {/if}
 
-<!-- Outline Modal / Mobile Bottom Sheet -->
-{#if showOutlineModal}
-  <div class="fixed inset-0 z-50 flex flex-col justify-end sm:flex-row sm:items-center sm:justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs">
-    <!-- Clickable backdrop -->
-    <button
-      type="button"
-      class="fixed inset-0 bg-transparent -z-10 cursor-default"
-      onclick={() => (showOutlineModal = false)}
-      aria-label="Close outline assistant"
-    ></button>
 
-    <div class="w-full max-w-lg bg-card border-t sm:border border-border rounded-t-2xl sm:rounded-xl p-5 space-y-4 font-sans shadow-2xl max-h-[85vh] overflow-y-auto">
-      <!-- Mobile grab handle -->
-      <div class="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto -mt-2 mb-1 sm:hidden"></div>
-
-      <div class="flex items-center justify-between border-b border-border/50 pb-2.5 shrink-0">
-        <h3 class="text-sm font-serif font-normal text-foreground">Outline Helper</h3>
-        <button onclick={() => (showOutlineModal = false)} class="p-1 text-muted-foreground hover:text-foreground">
-          <HugeiconsIcon icon={Cancel01Icon} size={15} />
-        </button>
-      </div>
-
-      <div class="space-y-1">
-        <label for="outline-topic-input" class="text-xs text-muted-foreground font-sans">Topic</label>
-        <input
-          id="outline-topic-input"
-          type="text"
-          bind:value={outlineTopic}
-          placeholder="e.g. Distributed Consensus in Raft"
-          class="w-full px-3 py-1.5 bg-background border border-border/60 rounded-lg text-xs font-sans text-foreground focus:outline-none focus:border-foreground/40"
-        />
-      </div>
-
-      <div class="flex justify-end">
-        <button
-          onclick={generateOutline}
-          disabled={isGeneratingOutline || !outlineTopic.trim()}
-          class="btn-base btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
-        >
-          {isGeneratingOutline ? 'Generating...' : 'Generate'}
-        </button>
-      </div>
-
-      {#if generatedOutline}
-        <div class="p-3 rounded-lg bg-muted/20 border border-border/50 text-xs max-h-56 overflow-y-auto font-sans text-foreground leading-relaxed whitespace-pre-wrap">
-          {generatedOutline}
-        </div>
-
-        <div class="flex justify-end pt-2">
-          <button onclick={insertGeneratedOutline} class="btn-base btn-primary text-xs px-3 py-1.5">
-            Insert
-          </button>
-        </div>
-      {/if}
-    </div>
-  </div>
-{/if}

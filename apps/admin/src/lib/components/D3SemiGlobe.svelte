@@ -12,6 +12,7 @@
     views: number;
     readingHours?: number;
     isRealtime?: boolean;
+    isPulse?: boolean;
     color?: 'green' | 'blue';
   };
 
@@ -44,6 +45,8 @@
   let bordersFeature = $state<any | null>(null);
   let isDragging = false;
   let lastPos = { x: 0, y: 0 };
+  let velocity = { x: 0, y: 0 };
+  let animFrameId: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
 
   // Load world countries & borders GeoJSON
@@ -73,17 +76,42 @@
 
     return () => {
       resizeObserver?.disconnect();
+      if (animFrameId) cancelAnimationFrame(animFrameId);
     };
   });
 
   onDestroy(() => {
     resizeObserver?.disconnect();
+    if (animFrameId) cancelAnimationFrame(animFrameId);
   });
 
-  // Dragging to rotate with smooth damping
+  // Smooth inertial rotation momentum on drag release
+  function startInertia() {
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+
+    const step = () => {
+      if (Math.abs(velocity.x) < 0.02 && Math.abs(velocity.y) < 0.02) {
+        velocity = { x: 0, y: 0 };
+        return;
+      }
+      const newLambda = rotation[0] + velocity.x;
+      const newPhi = Math.max(-89, Math.min(89, rotation[1] - velocity.y));
+      rotation = [newLambda, newPhi, rotation[2]];
+
+      velocity.x *= 0.94;
+      velocity.y *= 0.94;
+
+      animFrameId = requestAnimationFrame(step);
+    };
+    animFrameId = requestAnimationFrame(step);
+  }
+
+  // Full unconstrained rotation handling (mouse & touch)
   function handleMouseDown(e: MouseEvent) {
+    if (animFrameId) cancelAnimationFrame(animFrameId);
     isDragging = true;
     lastPos = { x: e.clientX, y: e.clientY };
+    velocity = { x: 0, y: 0 };
   }
 
   function handleMouseMove(e: MouseEvent) {
@@ -92,25 +120,63 @@
       const dy = e.clientY - lastPos.y;
       lastPos = { x: e.clientX, y: e.clientY };
 
-      const sens = 0.32;
+      const sens = 0.35;
+      velocity = { x: dx * sens * 0.45, y: dy * sens * 0.45 };
+
+      // Full horizontal spin without clamp + full vertical tilt
       const newLambda = rotation[0] + dx * sens;
-      // Clamp pitch to keep semi-globe dome upright and stable
-      const newPhi = Math.max(-42, Math.min(-10, rotation[1] - dy * sens));
+      const newPhi = Math.max(-89, Math.min(89, rotation[1] - dy * sens));
       rotation = [newLambda, newPhi, rotation[2]];
     }
   }
 
   function handleMouseUp() {
-    isDragging = false;
+    if (isDragging) {
+      isDragging = false;
+      startInertia();
+    }
+  }
+
+  // Touch handlers for mobile / tablet gestures
+  function handleTouchStart(e: TouchEvent) {
+    if (e.touches.length === 1) {
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      isDragging = true;
+      lastPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      velocity = { x: 0, y: 0 };
+    }
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (isDragging && e.touches.length === 1) {
+      const dx = e.touches[0].clientX - lastPos.x;
+      const dy = e.touches[0].clientY - lastPos.y;
+      lastPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+
+      const sens = 0.35;
+      velocity = { x: dx * sens * 0.45, y: dy * sens * 0.45 };
+
+      const newLambda = rotation[0] + dx * sens;
+      const newPhi = Math.max(-89, Math.min(89, rotation[1] - dy * sens));
+      rotation = [newLambda, newPhi, rotation[2]];
+    }
+  }
+
+  function handleTouchEnd() {
+    if (isDragging) {
+      isDragging = false;
+      startInertia();
+    }
   }
 
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
     const delta = e.deltaY < 0 ? 0.05 : -0.05;
-    zoomLevel = Math.max(0.75, Math.min(1.4, zoomLevel + delta));
+    zoomLevel = Math.max(0.75, Math.min(1.5, zoomLevel + delta));
   }
 
   function resetToIndia() {
+    if (animFrameId) cancelAnimationFrame(animFrameId);
     rotation = [...DEFAULT_ROTATION];
     zoomLevel = 1.0;
   }
@@ -122,10 +188,10 @@
   );
 
   // Proportional semi-globe dome geometry matching user's reference image:
-  // Sphere curves gracefully within width & height, not over-zoomed!
-  let sphereRadius = $derived(Math.min(width * 0.44, Math.max(height * 0.72, 300)) * zoomLevel);
+  // Shows a perfect hemisphere rising from the bottom with graceful curves
+  let sphereRadius = $derived(Math.min(width * 0.45, Math.max(height * 0.74, 290)) * zoomLevel);
   let centerX = $derived(width / 2);
-  let centerY = $derived(height * 0.78);
+  let centerY = $derived(height * 0.80);
 
   let projection = $derived(
     d3
@@ -138,8 +204,8 @@
 
   let pathGenerator = $derived(d3.geoPath().projection(projection));
 
-  // Graticule (15 deg lat/long mesh)
-  let graticuleData = $derived(d3.geoGraticule().step([15, 15])());
+  // Graticule: Dense section lines spaced every 10 degrees matching user's reference image
+  let graticuleData = $derived(d3.geoGraticule().step([10, 10])());
   let graticulePath = $derived(pathGenerator(graticuleData as any) || '');
 
   // Calculate visible dots on the front-facing hemisphere
@@ -155,7 +221,7 @@
         const isVisible = dist < Math.PI / 2;
         const coords = projection([lng, lat]);
 
-        // Green & Blue dots matching reference image
+        // Emerald Green & Azure Blue matching reference image
         const color = loc.color || (idx % 2 === 0 ? 'green' : 'blue');
 
         return {
@@ -167,7 +233,7 @@
           dist
         };
       })
-      .filter((loc) => loc.isVisible && loc.x > 0 && loc.y > 0 && loc.y < height + 30);
+      .filter((loc) => loc.isVisible && loc.x > 0 && loc.y > 0 && loc.y < height + 40);
   });
 
   let leaveTimeout: any = null;
@@ -177,7 +243,7 @@
       clearTimeout(leaveTimeout);
       leaveTimeout = null;
     }
-    if (activeHover?.city === loc.city && activeHover?.country === loc.country) {
+    if (activeHover?.id === loc.id || (activeHover?.city === loc.city && activeHover?.country === loc.country && !loc.id)) {
       return;
     }
     activeHover = loc;
@@ -192,23 +258,26 @@
     leaveTimeout = setTimeout(() => {
       activeHover = null;
       tooltipPos = null;
-    }, 100);
+    }, 120);
   }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   bind:this={container}
-  class="relative w-full rounded-2xl overflow-hidden select-none bg-[#f7f7f5] dark:bg-[#141416] border border-black/[0.06] dark:border-white/[0.08]"
+  class="relative w-full rounded-2xl overflow-hidden select-none bg-[#f6f5f0] dark:bg-[#1c1c1b] border border-black/[0.06] dark:border-white/[0.06]"
   style="height: {height}px; font-family: var(--font-openrunde), 'OpenRunde', sans-serif;"
   onmousemove={handleMouseMove}
   onmouseup={handleMouseUp}
   onmouseleave={handleMouseUp}
   onwheel={handleWheel}
+  ontouchstart={handleTouchStart}
+  ontouchmove={handleTouchMove}
+  ontouchend={handleTouchEnd}
   role="region"
   aria-label="Geographic Semi-Globe Dome"
 >
-  <!-- Apple-minimal Reset button -->
+  <!-- Minimal Reset button -->
   {#if isModified}
     <div class="absolute top-3.5 right-3.5 z-20">
       <button
@@ -234,34 +303,35 @@
     {height}
     class="cursor-grab active:cursor-grabbing w-full h-full block"
     onmousedown={handleMouseDown}
+    shape-rendering="geometricPrecision"
   >
-    <!-- Sphere Arc Circle (The globe base matching image) -->
+    <!-- Sphere Arc Circle (The globe base matching reference image) -->
     <circle
       cx={centerX}
       cy={centerY}
       r={sphereRadius}
-      class="fill-[#efefec] dark:fill-[#18181c] stroke-[#d0d2d7] dark:stroke-[#2e2e34]"
-      stroke-width="1.2"
+      class="fill-[#eeede7] dark:fill-[#171716] stroke-[#b8b8b3] dark:stroke-[#3a3a37]"
+      stroke-width="0.6"
     />
 
-    <!-- Graticule Lat / Long Grid Lines matching image -->
+    <!-- Graticule Lat / Long Grid Lines: Dense section lines spaced every 10 degrees -->
     {#if graticulePath}
       <path
         d={graticulePath}
         fill="none"
-        class="stroke-[#dedfe3] dark:stroke-[#26262c]"
-        stroke-width="0.55"
+        class="stroke-[#dcdbd5] dark:stroke-[#282826]"
+        stroke-width="0.4"
       />
     {/if}
 
-    <!-- Country Polygons -->
+    <!-- Country Polygons: Exact same border thickness matching reference image -->
     {#each countryFeatures as feature, i (i)}
       {@const p = pathGenerator(feature)}
       {#if p}
         <path
           d={p}
-          class="fill-[#f5f5f3] dark:fill-[#1e1e24] stroke-[#c5c8ce] dark:stroke-[#3f3f46]"
-          stroke-width="0.45"
+          class="fill-[#f5f4ee] dark:fill-[#222221] stroke-[#b8b8b3] dark:stroke-[#3a3a37]"
+          stroke-width="0.5"
         />
       {/if}
     {/each}
@@ -273,20 +343,20 @@
         <path
           d={bp}
           fill="none"
-          class="stroke-[#9ca3af] dark:stroke-[#6b7280]"
-          stroke-width="0.75"
+          class="stroke-[#b8b8b3] dark:stroke-[#3a3a37]"
+          stroke-width="0.5"
         />
       {/if}
     {/if}
 
-    <!-- Geographic Dots (Blue & Green matching image) -->
-    {#each visibleLocations as loc (loc.id || `${loc.city}-${loc.country}-${loc.color}`)}
+    <!-- Geographic Session Dots (Blue & Green matching image, with pulsing radar animations) -->
+    {#each visibleLocations as loc, idx (loc.id || `${loc.city}-${loc.country}-${idx}`)}
       {@const isBlue = loc.color === 'blue'}
-      {@const dotFill = isBlue ? '#4889c8' : '#5ea250'}
+      {@const dotFill = isBlue ? '#4688cf' : '#56ab46'}
       {@const isSelected = selectedCity === loc.city}
       {@const isHovered = activeHover?.city === loc.city && activeHover?.country === loc.country}
 
-      <!-- Interactive Dot Group with invisible hit zone to completely prevent hover flicker -->
+      <!-- Interactive Dot Group with invisible hit zone -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <g
         class="cursor-pointer"
@@ -297,13 +367,24 @@
           if (onselect) onselect(loc);
         }}
       >
-        <!-- Transparent 18px hit target -->
+        <!-- Transparent 16px hit target -->
         <circle
           cx={loc.x}
           cy={loc.y}
-          r={9}
+          r={8}
           fill="transparent"
         />
+
+        <!-- Radar Pulse Ring for Active / Realtime Sessions -->
+        {#if loc.isPulse || loc.isRealtime}
+          <circle
+            cx={loc.x}
+            cy={loc.y}
+            class="radar-ring pointer-events-none"
+            stroke={dotFill}
+            style="animation-delay: {((idx * 17) % 24) * 0.1}s;"
+          />
+        {/if}
 
         <!-- Selection Ring -->
         {#if isSelected}
@@ -313,27 +394,26 @@
             r={5.5}
             fill="none"
             stroke={dotFill}
-            stroke-width="1.5"
+            stroke-width="1.2"
             opacity="0.8"
             class="pointer-events-none"
           />
         {/if}
 
-        <!-- Solid Core Dot -->
+        <!-- Solid Core Session Dot -->
         <circle
           cx={loc.x}
           cy={loc.y}
-          r={isHovered ? 3.8 : (isSelected ? 3.4 : 2.6)}
+          r={isHovered ? 3.4 : (isSelected ? 3.0 : 2.2)}
           fill={dotFill}
-          stroke="#ffffff"
-          stroke-width="0.4"
-          class="pointer-events-none transition-[r] duration-100"
+          class="pointer-events-none stroke-white dark:stroke-[#171716] transition-[r] duration-100"
+          stroke-width="0.35"
         />
       </g>
     {/each}
   </svg>
 
-  <!-- Clean Floating Tooltip with Quadrant and OpenRunde (Static position, NO transition-all jitter) -->
+  <!-- Clean Floating Tooltip with OpenRunde & Quadrant -->
   {#if activeHover && tooltipPos}
     <div
       class="absolute z-30 pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3 bg-white/95 dark:bg-zinc-900/95 text-zinc-900 dark:text-zinc-100 border border-black/[0.08] dark:border-white/[0.1] px-3 py-2 rounded-xl shadow-lg backdrop-blur-md text-xs min-w-36 transition-opacity duration-150"
@@ -343,7 +423,7 @@
         <span class="font-normal text-zinc-900 dark:text-zinc-50 text-[13px]" style="font-family: var(--font-quadrant), serif;">
           {activeHover.city}
         </span>
-        <span class="w-1.5 h-1.5 rounded-full {activeHover.color === 'blue' ? 'bg-[#4889c8]' : 'bg-[#5ea250]'}"></span>
+        <span class="w-1.5 h-1.5 rounded-full {activeHover.color === 'blue' ? 'bg-[#4688cf]' : 'bg-[#56ab46]'}"></span>
       </div>
       <div class="text-[11px] text-zinc-500 dark:text-zinc-400 mb-1.5">
         {activeHover.region ? `${activeHover.region}, ` : ''}{activeHover.country}
@@ -357,3 +437,27 @@
     </div>
   {/if}
 </div>
+
+<style>
+  @keyframes radar-pulse {
+    0% {
+      r: 2px;
+      opacity: 0.9;
+      stroke-width: 1px;
+    }
+    60% {
+      opacity: 0.4;
+      stroke-width: 0.6px;
+    }
+    100% {
+      r: 9px;
+      opacity: 0;
+      stroke-width: 0.3px;
+    }
+  }
+
+  .radar-ring {
+    fill: none;
+    animation: radar-pulse 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+</style>

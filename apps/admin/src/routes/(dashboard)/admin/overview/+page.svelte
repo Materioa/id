@@ -438,7 +438,10 @@
       }
       const res: any = await makeAdminRequest(`google-analytics?${params.toString()}`, 'GET');
       if (res?.data) {
-        gaData = res.data;
+        gaData = {
+          ...res.data,
+          is_live: res.is_live ?? true
+        };
         if (res.data.summary) {
           const s = res.data.summary;
           if (s.total_users) gaTotalUsers = String(s.total_users);
@@ -1500,8 +1503,8 @@
       <div class="flex items-center justify-between mb-3 px-1">
         <h2 class="text-xs font-semibold text-foreground dash-text-title">Geographic distribution</h2>
         <div class="flex items-center gap-3 text-[11px] text-muted-foreground">
-          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#5ea250]"></span> Active</span>
-          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#4889c8]"></span> Views</span>
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#56ab46]"></span> Sessions</span>
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#4688cf]"></span> Views</span>
         </div>
       </div>
 

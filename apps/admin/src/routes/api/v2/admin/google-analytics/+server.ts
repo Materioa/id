@@ -45,11 +45,28 @@ const CITY_COORDINATES: Record<string, [number, number]> = {
   'Anjar': [70.0274, 23.1133],
   'Bhachau': [70.3456, 23.2922],
   'Vejalpur': [73.5581, 22.6891],
+  'Navsari': [72.9276, 20.9467],
+  'Valsad': [72.9298, 20.5992],
+  'Vapi': [72.9342, 20.3708],
+  'Nadiad': [72.8634, 22.6916],
+  'Patan': [72.1266, 23.8493],
+  'Godhra': [73.6143, 22.7758],
+  'Morbi': [70.8385, 22.8173],
+  'Surendranagar': [71.6370, 22.7274],
+  'Porbandar': [69.6293, 21.6417],
+  'Veraval': [70.3667, 20.9000],
+  'Palanpur': [72.4387, 24.1724],
+  'Dahod': [74.2559, 22.8361],
+  'Botad': [71.6644, 22.1704],
   'Mumbai': [72.8776, 19.0759],
   'Pune': [73.8567, 18.5204],
+  'Talegaon Dabhade': [73.6841, 18.7303],
+  'Talegaon': [73.6841, 18.7303],
   'Nashik': [73.7903, 19.9975],
   'Solapur': [75.9064, 17.6599],
   'Kolhapur': [74.2433, 16.7050],
+  'Nagpur': [79.0882, 21.1458],
+  'Aurangabad': [75.3433, 19.8762],
   'Bengaluru': [77.5946, 12.9716],
   'Bangalore': [77.5946, 12.9716],
   'Hubballi': [75.1240, 15.3647],
@@ -67,9 +84,14 @@ const CITY_COORDINATES: Record<string, [number, number]> = {
   'Jaipur': [75.7873, 26.9124],
   'Kota': [75.8362, 25.1825],
   'Lucknow': [80.9462, 26.8467],
+  'Agra': [78.0081, 27.1767],
   'Kolkata': [88.3639, 22.5726],
   'Bhubaneswar': [85.8245, 20.2961],
   'Dhenkanal': [85.5959, 20.6657],
+  'Indore': [75.8577, 22.7196],
+  'Khargone': [75.6022, 21.8234],
+  'Bhopal': [77.4126, 23.2599],
+  'Ujjain': [75.7873, 23.1765],
   'Council Bluffs': [-95.8608, 41.2619],
   'Ashburn': [-77.4874, 39.0438],
   'Glenview': [-87.7884, 42.0697],
@@ -81,25 +103,70 @@ const CITY_COORDINATES: Record<string, [number, number]> = {
   'Singapore': [103.8198, 1.3520],
   'London': [-0.1278, 51.5074],
   'Dubai': [55.2708, 25.2048],
+  'Tokyo': [139.6917, 35.6895],
+  'Paris': [2.3522, 48.8566],
+  'Berlin': [13.4050, 52.5200],
   'Sydney': [151.2093, -33.8688]
 };
 
-function getCityCoords(cityName: string, countryName?: string): [number, number] {
-  if (CITY_COORDINATES[cityName]) return CITY_COORDINATES[cityName];
-  for (const [key, coords] of Object.entries(CITY_COORDINATES)) {
-    if (cityName.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(cityName.toLowerCase())) {
-      return coords;
+const REGION_COORDINATES: Record<string, [number, number]> = {
+  'Gujarat': [71.1924, 22.2587],
+  'Maharashtra': [75.7139, 19.7515],
+  'Karnataka': [75.7139, 15.3173],
+  'Madhya Pradesh': [77.4126, 22.9734],
+  'Tamil Nadu': [78.6569, 11.1271],
+  'Telangana': [79.0193, 18.1124],
+  'Andhra Pradesh': [79.7400, 15.9129],
+  'Uttar Pradesh': [80.9462, 26.8467],
+  'Rajasthan': [74.2179, 27.0238],
+  'West Bengal': [87.8550, 22.9868],
+  'Kerala': [76.2711, 10.8505],
+  'Punjab': [75.3412, 31.1471],
+  'Haryana': [76.0856, 29.0588],
+  'Delhi': [77.2090, 28.6139],
+  'Bihar': [85.3131, 25.0961],
+  'Iowa': [-93.0977, 41.8780],
+  'Virginia': [-78.6569, 37.4316],
+  'Illinois': [-89.3985, 40.6331],
+  'Oregon': [-120.5542, 43.8041],
+  'California': [-119.4179, 36.7783],
+  'Texas': [-99.9018, 31.9686],
+  'New York': [-74.0060, 40.7128],
+  'Washington': [-120.7401, 47.7511]
+};
+
+function getLocationCoords(
+  cityName: string,
+  regionName?: string,
+  countryName?: string
+): { coords: [number, number]; isMetro: boolean; isRegion: boolean } {
+  const cleanCity = cityName && cityName !== '(not set)' ? cityName.trim() : '';
+  const cleanRegion = regionName && regionName !== '(not set)' ? regionName.trim() : '';
+  const cleanCountry = countryName && countryName !== '(not set)' ? countryName.trim() : '';
+
+  if (cleanCity && CITY_COORDINATES[cleanCity]) {
+    return { coords: CITY_COORDINATES[cleanCity], isMetro: true, isRegion: false };
+  }
+  if (cleanCity) {
+    for (const [key, coords] of Object.entries(CITY_COORDINATES)) {
+      if (cleanCity.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(cleanCity.toLowerCase())) {
+        return { coords, isMetro: true, isRegion: false };
+      }
     }
   }
-  // Country centers
-  if (countryName === 'India') return [78.9629, 20.5937];
-  if (countryName === 'United States') return [-95.7129, 37.0902];
-  if (countryName === 'United Kingdom') return [-3.4360, 55.3781];
-  if (countryName === 'France') return [2.2137, 46.2276];
-  if (countryName === 'Singapore') return [103.8198, 1.3520];
-  if (countryName === 'Hong Kong') return [114.1693, 22.3193];
+  if (cleanRegion && REGION_COORDINATES[cleanRegion]) {
+    return { coords: REGION_COORDINATES[cleanRegion], isMetro: false, isRegion: true };
+  }
+  if (cleanCountry === 'India') return { coords: [78.9629, 20.5937], isMetro: false, isRegion: true };
+  if (cleanCountry === 'United States') return { coords: [-95.7129, 37.0902], isMetro: false, isRegion: true };
+  if (cleanCountry === 'United Kingdom') return { coords: [-3.4360, 55.3781], isMetro: false, isRegion: true };
+  if (cleanCountry === 'France') return { coords: [2.2137, 46.2276], isMetro: false, isRegion: true };
+  if (cleanCountry === 'China') return { coords: [104.1954, 35.8617], isMetro: false, isRegion: true };
+  if (cleanCountry === 'Japan') return { coords: [138.2529, 36.2048], isMetro: false, isRegion: true };
+  if (cleanCountry === 'Singapore') return { coords: [103.8198, 1.3520], isMetro: true, isRegion: false };
+  if (cleanCountry === 'Australia') return { coords: [133.7751, -25.2744], isMetro: false, isRegion: true };
 
-  return [73.2043 + (Math.sin(cityName.length) * 4), 22.3008 + (Math.cos(cityName.length) * 4)];
+  return { coords: [73.2043, 22.3008], isMetro: false, isRegion: true };
 }
 
 // Exchange Google Service Account credentials for an OAuth2 access token
@@ -294,7 +361,7 @@ export async function GET({ request, url }) {
         }
       );
 
-      // Geographic Cities
+      // Geographic Distribution: Query all cities, countries and regions (up to 250 rows)
       const geoRes = await fetch(
         `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
         {
@@ -302,10 +369,10 @@ export async function GET({ request, url }) {
           headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             dateRanges: [{ startDate, endDate }],
-            dimensions: [{ name: 'city' }, { name: 'country' }],
-            metrics: [{ name: 'totalUsers' }, { name: 'screenPageViews' }],
-            limit: 30,
-            orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }]
+            dimensions: [{ name: 'city' }, { name: 'country' }, { name: 'region' }],
+            metrics: [{ name: 'sessions' }, { name: 'activeUsers' }, { name: 'screenPageViews' }],
+            limit: 250,
+            orderBys: [{ metric: { metricName: 'sessions' }, desc: true }]
           })
         }
       );
@@ -362,40 +429,103 @@ export async function GET({ request, url }) {
           }
         }
 
-        const mappedLocations: Array<{
+        // Aggregate for Top Locations table & generate dot for each session
+        const sessionDots: Array<{
+          id: string;
           city: string;
           country: string;
+          region?: string;
           coordinates: [number, number];
           users: number;
           views: number;
           readingHours: number;
           isRealtime: boolean;
+          isPulse: boolean;
           color: 'green' | 'blue';
         }> = [];
 
+        const topCitiesMap = new Map<string, any>();
+
         if (geoJson?.rows) {
-          geoJson.rows.forEach((r: any, idx: number) => {
-            const city = r.dimensionValues?.[0]?.value || '';
-            const country = r.dimensionValues?.[1]?.value || '';
-            if (!city || city === '(not set)') return;
+          geoJson.rows.forEach((r: any, rowIdx: number) => {
+            const rawCity = r.dimensionValues?.[0]?.value || '';
+            const rawCountry = r.dimensionValues?.[1]?.value || '';
+            const rawRegion = r.dimensionValues?.[2]?.value || '';
 
-            const u = parseInt(r.metricValues?.[0]?.value || '0', 10);
-            const v = parseInt(r.metricValues?.[1]?.value || '0', 10);
-            const coords = getCityCoords(city, country);
-            const isRt = Boolean(realtimeLocationsMap[city]);
+            if (rawCity === '(not set)' && rawRegion === '(not set)' && rawCountry === '(not set)') return;
 
-            mappedLocations.push({
-              city,
-              country,
-              coordinates: coords,
-              users: u,
-              views: v,
-              readingHours: Math.round((v * 1.8) / 60) || 1,
-              isRealtime: isRt,
-              color: idx % 2 === 0 ? 'green' : 'blue'
-            });
+            const sessions = parseInt(r.metricValues?.[0]?.value || '0', 10);
+            const users = parseInt(r.metricValues?.[1]?.value || '0', 10);
+            const views = parseInt(r.metricValues?.[2]?.value || '0', 10);
+
+            const displayCity = (rawCity && rawCity !== '(not set)') ? rawCity : (rawRegion && rawRegion !== '(not set)' ? rawRegion : rawCountry);
+            const { coords: [baseLon, baseLat], isMetro, isRegion } = getLocationCoords(rawCity, rawRegion, rawCountry);
+            const isRt = Boolean(realtimeLocationsMap[rawCity] || realtimeLocationsMap[displayCity]);
+
+            // Group into top_cities table
+            const cityKey = `${displayCity}, ${rawCountry}`;
+            if (!topCitiesMap.has(cityKey)) {
+              topCitiesMap.set(cityKey, {
+                city: displayCity,
+                region: rawRegion !== '(not set)' ? rawRegion : '',
+                country: rawCountry,
+                coordinates: [baseLon, baseLat],
+                users,
+                views,
+                sessions,
+                readingHours: Math.round((views * 1.8) / 60) || 1,
+                isRealtime: isRt
+              });
+            } else {
+              const existing = topCitiesMap.get(cityKey);
+              existing.users += users;
+              existing.views += views;
+              existing.sessions += sessions;
+            }
+
+            // "make dot for each session":
+            // Render individual dots for each session with natural phyllotaxis dispersion
+            let numDots = 1;
+            if (sessions > 1) {
+              numDots = Math.min(sessions, Math.round(1 + Math.pow(sessions, 0.62) * 3.2));
+            }
+
+            const maxSpread = isMetro ? 0.32 : (isRegion ? 1.3 : 2.5);
+
+            for (let s = 0; s < numDots; s++) {
+              let dotLon = baseLon;
+              let dotLat = baseLat;
+
+              if (s > 0) {
+                const angle = s * 2.39996323; // Golden angle phyllotaxis
+                const radiusFrac = Math.sqrt((s + 0.5) / numDots);
+                const r = radiusFrac * maxSpread;
+                dotLat = baseLat + r * Math.sin(angle);
+                const cosLat = Math.cos((baseLat * Math.PI) / 180);
+                dotLon = baseLon + (r * Math.cos(angle)) / (Math.abs(cosLat) > 0.05 ? cosLat : 1);
+              }
+
+              const color: 'green' | 'blue' = (rowIdx + s) % 2 === 0 ? 'green' : 'blue';
+              const isPulse = isRt || ((s % 8 === 0) && (rowIdx < 6));
+
+              sessionDots.push({
+                id: `${displayCity}-${rowIdx}-${s}`,
+                city: displayCity,
+                country: rawCountry,
+                region: rawRegion !== '(not set)' ? rawRegion : '',
+                coordinates: [dotLon, dotLat],
+                users: 1,
+                views: Math.max(1, Math.round(views / numDots)),
+                readingHours: Math.max(1, Math.round((views * 1.8) / (60 * numDots))),
+                isRealtime: isRt,
+                isPulse,
+                color
+              });
+            }
           });
         }
+
+        const topCities = Array.from(topCitiesMap.values()).sort((a, b) => b.sessions - a.sessions);
 
         const avgDurationMin = activeUsers > 0 ? Math.round((engagementSec / activeUsers) / 60) : 0;
         const avgDurationRemSec = activeUsers > 0 ? Math.round((engagementSec / activeUsers) % 60) : 0;
@@ -413,8 +543,8 @@ export async function GET({ request, url }) {
           },
           traffic_sources: trafficSources,
           top_pages: topPages,
-          top_cities: mappedLocations,
-          locations: mappedLocations,
+          top_cities: topCities,
+          locations: sessionDots,
           realtime_trend: Array.from({ length: 30 }, (_, i) => ({
             minute: 30 - i,
             users: Math.max(1, Math.round((realtimeActiveCount || 20) * (0.6 + Math.random() * 0.8)))
