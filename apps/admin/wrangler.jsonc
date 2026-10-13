@@ -13,7 +13,14 @@
     // Flip to "r2" only after: R2 enabled + bucket created + 1.8GB uploaded + worker deployed.
     "CDN_BACKEND": "github",
     // At flip time set PUBLIC_CDN_BASE to the deployed worker URL, then to https://cdn.getmaterio.app at DNS cutover.
-    "PUBLIC_CDN_BASE": "https://cdn.getmaterio.app"
+    "PUBLIC_CDN_BASE": "https://cdn.getmaterio.app",
+    "CLOUDINARY_CLOUD_NAME": "dvsdsl7iw",
+    "CLOUDINARY_API_KEY": "412819653886923",
+    "CLOUDINARY_API_SECRET": "LPARAweIryTEMsJ_tmv4-RtkFGs",
+    "CLOUDINARY_URL": "cloudinary://412819653886923:LPARAweIryTEMsJ_tmv4-RtkFGs@dvsdsl7iw",
+    "GA4_PROPERTY_ID": "473257880",
+    "GOOGLE_PROPERTY_ID": "473257880",
+    "GOOGLE_SERVICE_ACCOUNT_EMAIL": "materio-ga4-reader@materio-builtby-jtc.iam.gserviceaccount.com"
   },
   // --- NEW-INFRA BINDINGS (uncomment at flip time; bucket must exist or deploy fails) ---
   // "r2_buckets": [{"binding": "MATERIO_CDN", "bucket_name": "materio-cdn"}],

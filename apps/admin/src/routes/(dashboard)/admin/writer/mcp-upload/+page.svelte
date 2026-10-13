@@ -61,6 +61,11 @@
 
         uploadedImages = [{ url: result.url, name: file.name, size: file.size }, ...uploadedImages];
         addToast(`Uploaded ${file.name}`, 'success');
+
+        if (!coverImage || !coverImage.trim()) {
+          setAsCover(result.url);
+          addToast(`Set ${file.name} as cover`, 'success');
+        }
       }
     } catch (err: any) {
       addToast(err.message || 'Error uploading file', 'error');

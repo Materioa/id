@@ -90,6 +90,8 @@ function resolveCloudinaryConfig(event: RequestEvent) {
   }
 
   if (!cloudName) cloudName = 'dvsdsl7iw';
+  if (!apiKey) apiKey = '412819653886923';
+  if (!apiSecret) apiSecret = 'LPARAweIryTEMsJ_tmv4-RtkFGs';
 
   return { cloudName, apiKey, apiSecret };
 }

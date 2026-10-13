@@ -51,6 +51,7 @@ id_ecdsa*
 id_ed25519*
 *.keystore
 *.jks
+*service-account*.json
 
 # Logs & Debug
 logs

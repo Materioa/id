@@ -94,12 +94,8 @@ export async function getPostsCollection() {
 
 export async function getAllPosts(options: { content?: boolean } = { content: false }) {
   const collection = await getPostsCollection();
-  const projection: Record<string, any> = {};
-  if (options.content === false) {
-    projection.content = 0;
-  }
   const rows = await collection
-    .find({}, { projection })
+    .find({}, {})
     .sort({ date: -1, _id: -1 })
     .toArray();
 

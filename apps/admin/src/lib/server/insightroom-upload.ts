@@ -151,6 +151,14 @@ export async function resolveUploadInput(input: Record<string, any>, fetchImpl: 
   throw new Error('Either image, local_path, filePath, file, image_file, or uploadedFile is required');
 }
 
+async function sha1Hex(message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function initCloudinary() {
   const cloud_name = env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME || 'dvsdsl7iw';
   const api_key = env.CLOUDINARY_API_KEY || process.env.CLOUDINARY_API_KEY || '412819653886923';
@@ -166,22 +174,37 @@ export function initCloudinary() {
 }
 
 export async function uploadBufferToCloudinary(buffer: Buffer, filename: string): Promise<string> {
-  initCloudinary();
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'insightroom/writer',
-        public_id: path.parse(filename).name + '-' + Date.now(),
-        resource_type: 'image'
-      },
-      (error, result) => {
-        if (error || !result) {
-          reject(error || new Error('Upload failed'));
-        } else {
-          resolve(result.secure_url || result.url);
-        }
-      }
-    );
-    uploadStream.end(buffer);
+  const cloud_name = env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME || 'dvsdsl7iw';
+  const api_key = env.CLOUDINARY_API_KEY || process.env.CLOUDINARY_API_KEY || '412819653886923';
+  const api_secret = env.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_API_SECRET || 'LPARAweIryTEMsJ_tmv4-RtkFGs';
+
+  const folder = 'insightroom/writer';
+  const timestamp = Math.round(Date.now() / 1000);
+  const baseName = path.parse(filename).name.replace(/[^a-zA-Z0-9_-]/g, '_') || 'upload';
+  const public_id = `${baseName}-${Date.now()}`;
+
+  const paramsToSign = `folder=${folder}&public_id=${public_id}&timestamp=${timestamp}${api_secret}`;
+  const signature = await sha1Hex(paramsToSign);
+
+  const formData = new FormData();
+  formData.append('file', new Blob([buffer]), filename);
+  formData.append('api_key', api_key);
+  formData.append('timestamp', String(timestamp));
+  formData.append('folder', folder);
+  formData.append('public_id', public_id);
+  formData.append('signature', signature);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/auto/upload`, {
+    method: 'POST',
+    body: formData
   });
+
+  const resJson = (await res.json()) as any;
+  if (!res.ok || resJson.error) {
+    console.error('Cloudinary upload failure:', resJson.error);
+    throw new Error(resJson.error?.message || 'Cloudinary upload failed');
+  }
+
+  return resJson.secure_url || resJson.url;
 }
+

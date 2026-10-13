@@ -38,24 +38,17 @@
   let isDeleting = $state(false);
   let postForAnalytics = $state<{ id: string; title: string } | null>(null);
 
-  // Extract all images in a post (cover + markdown embedded)
+  // Images are pre-computed server-side via extractPostImagesList (cover + all content images).
+  // The client receives post.images ready-to-use — no content re-scanning needed here.
   function extractPostImages(post: any): string[] {
-    if (Array.isArray(post.images) && post.images.length) {
-      return post.images;
+    // Use server-provided images array first (already contains cover + content images)
+    if (Array.isArray(post.images) && post.images.length > 0) {
+      return post.images.filter((img: any) => typeof img === 'string' && img.trim());
     }
+    // Fallback: build from cover fields if server array is missing
     const list: string[] = [];
-    const cover = post.image || post.metadata?.image;
-    if (cover) list.push(cover);
-
-    if (post.content) {
-      const regex = /!\[.*?\]\((https?:\/\/[^\s\)]+|\/[^\s\)]+)\)/g;
-      let match;
-      while ((match = regex.exec(post.content)) !== null) {
-        if (!list.includes(match[1])) {
-          list.push(match[1]);
-        }
-      }
-    }
+    const cover = post.image || post.metadata?.image || post.metadata?.cover;
+    if (cover && typeof cover === 'string' && cover.trim()) list.push(cover.trim());
     return list;
   }
 
@@ -320,7 +313,7 @@
   {#if activeScope === 'room'}
     <div class="border-t border-border/50 divide-y divide-border/40 group/list">
       {#each filteredRoomPosts as post}
-        <div class="py-3.5 sm:py-4 flex items-center justify-between gap-3 sm:gap-5 group transition-all duration-200 group-hover/list:opacity-40 hover:!opacity-100">
+        <div class="py-3.5 sm:py-4 pl-2 sm:pl-3 pr-1 flex items-center justify-between gap-3 sm:gap-5 group transition-all duration-300 group-hover/list:opacity-30 group-hover/list:blur-[1.2px] hover:!blur-none hover:!opacity-100">
           <!-- Left: Photo Fan Stack -->
           <PostPhotoStack images={extractPostImages(post)} alt={post.title} />
 
@@ -370,7 +363,7 @@
     <!-- Exodus Pages List -->
     <div class="border-t border-border/50 divide-y divide-border/40 group/list">
       {#each filteredExodusPosts as page}
-        <div class="py-3.5 sm:py-4 flex items-center justify-between gap-3 sm:gap-5 group transition-all duration-200 group-hover/list:opacity-40 hover:!opacity-100">
+        <div class="py-3.5 sm:py-4 pl-2 sm:pl-3 pr-1 flex items-center justify-between gap-3 sm:gap-5 group transition-all duration-300 group-hover/list:opacity-30 group-hover/list:blur-[1.2px] hover:!blur-none hover:!opacity-100">
           <!-- Left: Photo Fan Stack -->
           <PostPhotoStack images={extractPostImages(page)} alt={page.title} />
 

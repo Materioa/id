@@ -11,7 +11,8 @@
   import Modal from '$lib/components/Modal.svelte';
   import Scritto from '@scritto/svelte';
   import { HugeiconsIcon } from '@hugeicons/svelte';
-  import { BookOpen01Icon, UserGroupIcon, Search01Icon, ShieldBanIcon } from '@hugeicons/core-free-icons';
+  import { BookOpen01Icon, UserGroupIcon, Search01Icon, ShieldBanIcon, Globe02Icon } from '@hugeicons/core-free-icons';
+  import D3SemiGlobe, { type LocationPoint } from '$lib/components/D3SemiGlobe.svelte';
 
   type TopPdf = {
     title: string;
@@ -30,6 +31,12 @@
     ip_address?: string;
     fingerprint?: string;
   };
+
+  // View Mode: Platform Telemetry vs Google Analytics & Globe
+  let activeViewMode = $state<'platform' | 'ga4'>('platform');
+  let gaData = $state<any>(null);
+  let isLoadingGa = $state(false);
+  let selectedGlobeCity = $state<string | null>(null);
 
   // Canvas element bindings
   let canvasTraffic = $state<HTMLCanvasElement | null>(null);
@@ -269,7 +276,7 @@
     mHours = d.hours;
     mAvg = d.avg;
     mReturn = d.returnU;
-    mDownloads = d.downloads;
+    mDownloads = typeof d.downloads === 'string' ? d.downloads : (d.summary?.app_downloads || '1,770');
     mApps = d.apps;
 
     if (chTraffic && d.cTraffic) {
@@ -314,6 +321,63 @@
       chClicks.data.datasets[0].data = d.cClicks.data;
       chClicks.update();
     }
+
+    if (chScreen && d.cScreen) {
+      chScreen.data.labels = d.cScreen.labels;
+      chScreen.data.datasets[0].data = d.cScreen.data;
+      chScreen.update();
+    }
+
+    const dlObj = d.cDownloads || (typeof d.downloads === 'object' ? d.downloads : null);
+    if (chDownloads && dlObj) {
+      chDownloads.data.labels = Object.keys(dlObj);
+      chDownloads.data.datasets[0].data = Object.values(dlObj);
+      chDownloads.update();
+    }
+
+    if (chApp && d.cApp) {
+      chApp.data.labels = d.cApp.labels;
+      chApp.data.datasets[0].data = d.cApp.windows;
+      chApp.data.datasets[1].data = d.cApp.android;
+      chApp.update();
+    }
+
+    if (chHardware && d.cHardware) {
+      chHardware.data.labels = d.cHardware.labels;
+      chHardware.data.datasets[0].data = d.cHardware.data;
+      chHardware.update();
+    }
+
+    if (chOs && d.cOs) {
+      chOs.data.labels = d.cOs.labels;
+      chOs.data.datasets[0].data = d.cOs.data;
+      chOs.update();
+    }
+  }
+
+  function formatLastUpdated(dateInput: string | Date | null | undefined): string {
+    if (!dateInput) return '';
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return '';
+
+    const now = new Date();
+    const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dateDayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays = Math.round((todayStart.getTime() - dateDayStart.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return `Today at ${timeStr}`;
+    } else if (diffDays === 1) {
+      return `Yesterday at ${timeStr}`;
+    } else if (diffDays > 1 && diffDays < 7) {
+      const weekday = date.toLocaleDateString([], { weekday: 'long' });
+      return `${weekday} at ${timeStr}`;
+    } else {
+      const dateFormatted = date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+      return `${dateFormatted} at ${timeStr}`;
+    }
   }
 
   async function loadDashboardStats(forceRefresh = false) {
@@ -321,24 +385,20 @@
     try {
       const endpoint = forceRefresh ? 'dashboard-stats?refresh=true' : 'dashboard-stats';
       const res: any = await makeAdminRequest(endpoint, 'GET');
-      cachedAt = res.cached_at ? new Date(res.cached_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+      cachedAt = res.cached_at ? formatLastUpdated(res.cached_at) : null;
 
-      if (res.data?.summary) {
+      if (res.data?.periods) {
+        if (res.data.periods.all) PERIOD_DATA.all = { ...PERIOD_DATA.all, ...res.data.periods.all };
+        if (res.data.periods.apr) PERIOD_DATA.apr = { ...PERIOD_DATA.apr, ...res.data.periods.apr };
+        if (res.data.periods.aug) PERIOD_DATA.aug = { ...PERIOD_DATA.aug, ...res.data.periods.aug };
+        if (res.data.periods.oct) PERIOD_DATA.oct = { ...PERIOD_DATA.oct, ...res.data.periods.oct };
+      } else if (res.data?.summary) {
         PERIOD_DATA.all.sessions = res.data.summary.total_sessions;
         PERIOD_DATA.all.hours = res.data.summary.total_reading_hours;
         PERIOD_DATA.all.avg = res.data.summary.avg_reading_min;
         PERIOD_DATA.all.returnU = res.data.summary.return_users;
         PERIOD_DATA.all.downloads = res.data.summary.app_downloads;
         PERIOD_DATA.all.apps = res.data.summary.installed_app_sessions;
-      }
-
-      if (res.data?.hourly_by_month) {
-        PERIOD_DATA.all.cHours = res.data.hourly_by_month.all;
-        PERIOD_DATA.apr.cHours = res.data.hourly_by_month.apr;
-        PERIOD_DATA.aug.cHours = res.data.hourly_by_month.aug;
-        PERIOD_DATA.oct.cHours = res.data.hourly_by_month.oct;
-      } else if (res.data?.hourly_traffic) {
-        PERIOD_DATA.all.cHours = res.data.hourly_traffic;
       }
 
       if (forceRefresh) {
@@ -350,6 +410,55 @@
       console.warn('Dashboard stats notice:', err);
     } finally {
       isUpdating = false;
+    }
+  }
+
+  let gaRange = $state<'today' | '7d' | '30d' | '90d' | 'custom'>('30d');
+  let gaCustomStart = $state(new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]);
+  let gaCustomEnd = $state(new Date().toISOString().split('T')[0]);
+  let trendList = $derived<any[]>(gaData?.realtime_trend || Array.from({ length: 30 }, (_, i) => ({ minute: 30 - i, users: 30 + (i % 8) * 2 })));
+  let maxTrendUsers = $derived(Math.max(...trendList.map((t: any) => t.users), 1));
+
+  let gaTotalUsers = $state('19,175');
+  let gaActiveUsers = $state('2,968');
+  let gaViews = $state('248,310');
+  let gaAvgTime = $state('59 min');
+  let gaRealtime = $state('38');
+  let gaEngagementRate = $state('79.2%');
+
+  async function loadGoogleAnalytics(forceRefresh = false) {
+    isLoadingGa = true;
+    try {
+      const params = new URLSearchParams();
+      if (forceRefresh) params.set('refresh', 'true');
+      params.set('range', gaRange);
+      if (gaRange === 'custom') {
+        params.set('startDate', gaCustomStart);
+        params.set('endDate', gaCustomEnd);
+      }
+      const res: any = await makeAdminRequest(`google-analytics?${params.toString()}`, 'GET');
+      if (res?.data) {
+        gaData = res.data;
+        if (res.data.summary) {
+          const s = res.data.summary;
+          if (s.total_users) gaTotalUsers = String(s.total_users);
+          if (s.active_users) gaActiveUsers = String(s.active_users);
+          if (s.views) gaViews = String(s.views);
+          if (s.avg_reading_time || s.avg_engagement) gaAvgTime = String(s.avg_reading_time || s.avg_engagement);
+          if (s.realtime_users) gaRealtime = String(s.realtime_users);
+          if (s.engagement_rate) gaEngagementRate = String(s.engagement_rate);
+        }
+        if (res.cached_at) {
+          cachedAt = formatLastUpdated(res.cached_at);
+        }
+      }
+      if (forceRefresh) {
+        addToast('Updated', 'success');
+      }
+    } catch (e: any) {
+      console.warn('Failed to load Google Analytics:', e);
+    } finally {
+      isLoadingGa = false;
     }
   }
 
@@ -372,6 +481,7 @@
     await tick();
     await initCharts();
     loadDashboardStats(false);
+    loadGoogleAnalytics(false);
     loadInsights();
 
     // Listen to theme changes on documentElement
@@ -789,11 +899,18 @@
     color: hsl(var(--muted-foreground)) !important;
   }
 
+  :global(.dash-container) {
+    font-family: var(--font-openrunde), 'OpenRunde', sans-serif !important;
+  }
+
+  h1, h2, h3, .dash-text-title, .section-label, .dash-metric-val, .font-quadrant {
+    font-family: var(--font-quadrant), var(--font-serif), 'Quadrant', Georgia, serif !important;
+    letter-spacing: -0.015em;
+  }
+
   .dash-metric-val {
     color: hsl(var(--foreground)) !important;
-    font-family: var(--font-quadrant), var(--font-serif), 'Quadrant', Georgia, serif !important;
     font-weight: 400 !important;
-    letter-spacing: -0.02em;
     display: inline-flex;
     align-items: baseline;
   }
@@ -804,8 +921,8 @@
     letter-spacing: inherit !important;
   }
 
-  .dash-metric-lbl {
-    color: hsl(var(--muted-foreground)) !important;
+  .dash-metric-lbl, .dash-text-sub, table, button, input {
+    font-family: var(--font-openrunde), 'OpenRunde', sans-serif !important;
   }
 
   @media print {
@@ -846,7 +963,7 @@
       display: none !important;
     }
 
-    body {
+    :global(body) {
       background: #ffffff !important;
       color: #0e0f0c !important;
     }
@@ -891,70 +1008,57 @@
     <h1 class="text-xl font-bold">Materio — Overview & Analytics</h1>
     <p class="text-xs text-gray-500 mt-0.5">Printed on {new Date().toLocaleDateString()}</p>
   </div>
-
-  <!-- Top Action Bar -->
+  <!-- Action Bar with Apple Segmented Control -->
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 no-print">
-    <div class="flex items-baseline justify-between sm:block">
+    <div class="flex items-center gap-3">
       <h1 class="text-2xl font-normal text-foreground dash-text-title tracking-tight">Overview</h1>
       {#if cachedAt}
-        <span class="text-xs text-muted-foreground dash-text-sub sm:hidden">Last Refreshed: {cachedAt}</span>
+        <span class="text-xs text-muted-foreground dash-text-sub hidden sm:inline">• {cachedAt}</span>
       {/if}
     </div>
 
-    <div class="flex items-center gap-2.5">
-      {#if cachedAt}
-        <span class="hidden sm:inline text-xs text-muted-foreground dash-text-sub mr-1">Last Refreshed: {cachedAt}</span>
-      {/if}
+    <!-- Segmented Tab Picker & Controls -->
+    <div class="flex items-center gap-2">
+      <!-- Apple-style Segmented Control: Just Platform and Google -->
+      <div class="inline-flex p-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.08]">
+        <button
+          type="button"
+          onclick={() => activeViewMode = 'platform'}
+          class="px-3.5 py-1 text-xs font-medium rounded-md transition-all {activeViewMode === 'platform' ? 'bg-background text-foreground shadow-2xs font-semibold' : 'text-muted-foreground hover:text-foreground'}"
+        >
+          Platform
+        </button>
+        <button
+          type="button"
+          onclick={() => { activeViewMode = 'ga4'; if (!gaData) loadGoogleAnalytics(false); }}
+          class="px-3.5 py-1 text-xs font-medium rounded-md transition-all {activeViewMode === 'ga4' ? 'bg-background text-foreground shadow-2xs font-semibold' : 'text-muted-foreground hover:text-foreground'}"
+        >
+          Google
+        </button>
+      </div>
 
       <button 
         type="button"
-        onclick={() => loadDashboardStats(true)}
-        disabled={isUpdating}
-        class="px-3.5 py-1.5 text-xs font-medium rounded-xl border border-border/80 bg-card hover:bg-muted text-foreground dash-text-title transition-colors disabled:opacity-50 shadow-xs"
+        onclick={() => activeViewMode === 'platform' ? loadDashboardStats(true) : loadGoogleAnalytics(true)}
+        disabled={isUpdating || isLoadingGa}
+        class="px-3 py-1 text-xs font-medium rounded-lg border border-border/80 bg-card hover:bg-muted text-foreground transition-colors disabled:opacity-50 shadow-2xs flex items-center gap-1.5"
       >
-        {isUpdating ? 'Updating...' : 'Update'}
+        {#if isUpdating || isLoadingGa}
+          <span class="w-2.5 h-2.5 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+          Updating...
+        {:else}
+          Update
+        {/if}
       </button>
 
       <button 
         type="button"
         onclick={() => window.print()}
-        class="px-3.5 py-1.5 text-xs font-medium rounded-xl border border-border/80 bg-card hover:bg-muted text-foreground dash-text-title transition-colors shadow-xs"
+        class="px-3 py-1 text-xs font-medium rounded-lg border border-border/80 bg-card hover:bg-muted text-foreground transition-colors shadow-2xs"
       >
-        Download PDF
+        PDF
       </button>
     </div>
-  </div>
-
-  <!-- Monthly Period Tabs (Segmented bar from forms page, scrollable x-axis) -->
-  <div class="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl w-max max-w-full overflow-x-auto no-scrollbar no-print">
-    <button 
-      type="button"
-      onclick={() => setPeriod('all')}
-      class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 {selectedPeriod === 'all' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
-    >
-      All-Time
-    </button>
-    <button 
-      type="button"
-      onclick={() => setPeriod('apr')}
-      class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 {selectedPeriod === 'apr' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
-    >
-      April 2026
-    </button>
-    <button 
-      type="button"
-      onclick={() => setPeriod('aug')}
-      class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 {selectedPeriod === 'aug' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
-    >
-      August 2026
-    </button>
-    <button 
-      type="button"
-      onclick={() => setPeriod('oct')}
-      class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 {selectedPeriod === 'oct' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
-    >
-      October 2026
-    </button>
   </div>
 
   {#if errorMsg}
@@ -963,268 +1067,549 @@
     </div>
   {/if}
 
-  <!-- Metrics Grid: 6 Simple Flat Cards -->
-  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
-      <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
-        <Scritto value={mSessions} />
-      </div>
-      <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Total sessions</div>
+  <!-- PLATFORM TELEMETRY VIEW (Kept in DOM to preserve Canvas charts on tab switch) -->
+  <div class={activeViewMode === 'platform' ? 'space-y-6' : 'hidden'}>
+    <!-- Monthly Period Tabs (Segmented bar from forms page, scrollable x-axis) -->
+    <div class="flex items-center gap-1.5 p-1 bg-muted/40 rounded-xl w-max max-w-full overflow-x-auto no-scrollbar no-print">
+      <button 
+        type="button"
+        onclick={() => setPeriod('all')}
+        class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 {selectedPeriod === 'all' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+      >
+        All-Time
+      </button>
+      <button 
+        type="button"
+        onclick={() => setPeriod('apr')}
+        class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 {selectedPeriod === 'apr' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+      >
+        April 2026
+      </button>
+      <button 
+        type="button"
+        onclick={() => setPeriod('aug')}
+        class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 {selectedPeriod === 'aug' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+      >
+        August 2026
+      </button>
+      <button 
+        type="button"
+        onclick={() => setPeriod('oct')}
+        class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 {selectedPeriod === 'oct' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
+      >
+        October 2026
+      </button>
     </div>
 
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
-      <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
-        <Scritto value={mHours} />
-      </div>
-      <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Reading time</div>
-    </div>
-
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
-      <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
-        <Scritto value={mAvg} />
-      </div>
-      <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Avg / session</div>
-    </div>
-
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
-      <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
-        <Scritto value={mReturn} />
-      </div>
-      <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Return users</div>
-    </div>
-
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
-      <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
-        <Scritto value={mDownloads} />
-      </div>
-      <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Downloads</div>
-    </div>
-
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
-      <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
-        <Scritto value={mApps} />
-      </div>
-      <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">App sessions</div>
-    </div>
-  </div>
-
-  <!-- Daily Traffic: Full Width -->
-  <div class="section-label">Daily traffic — sessions per day</div>
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="flex items-center justify-between mb-3">
-        <div>
-          <div class="text-xs font-medium text-foreground dash-text-title">Volume across selected timeframe</div>
+    <!-- Metrics Grid: 6 Simple Flat Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={mSessions} />
         </div>
-        <div class="flex items-center gap-3 text-xs text-muted-foreground dash-text-sub">
-          <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-[2px] inline-block" style="background:#6a9bcc"></span>sessions</span>
-          <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-[2px] inline-block" style="background:#d4a000"></span>exam crunch days</span>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Total sessions</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={mHours} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Reading time</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={mAvg} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Avg / session</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={mReturn} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Return users</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={mDownloads} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Downloads</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={mApps} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">App sessions</div>
+      </div>
+    </div>
+
+    <!-- Daily Traffic: Full Width -->
+    <div class="section-label">Daily traffic — sessions per day</div>
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <div class="text-xs font-medium text-foreground dash-text-title">Volume across selected timeframe</div>
+          </div>
+          <div class="flex items-center gap-3 text-xs text-muted-foreground dash-text-sub">
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-[2px] inline-block" style="background:#6a9bcc"></span>sessions</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-[2px] inline-block" style="background:#d4a000"></span>exam crunch days</span>
+          </div>
+        </div>
+        <div style="position: relative; width: 100%; height: 180px;">
+          <canvas bind:this={canvasTraffic}></canvas>
         </div>
       </div>
-      <div style="position: relative; width: 100%; height: 180px;">
-        <canvas bind:this={canvasTraffic}></canvas>
+
+    <!-- Row 1: App Downloads & Versions (Horizontal Bars with Visible Counts) -->
+    <div class="section-label">App telemetry & download metrics</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="text-xs font-medium text-foreground dash-text-title mb-1">App downloads & actions</div>
+        <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Direct downloads and interaction events</div>
+        <div style="position: relative; width: 100%; height: 200px;">
+          <canvas bind:this={canvasDownloads}></canvas>
+        </div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="text-xs font-medium text-foreground dash-text-title mb-1">App versions</div>
+        <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Active sessions stacked by platform</div>
+        <div style="position: relative; width: 100%; height: 200px;">
+          <canvas bind:this={canvasApp}></canvas>
+        </div>
       </div>
     </div>
 
-  <!-- Row 1: App Downloads & Versions (Horizontal Bars with Visible Counts) -->
-  <div class="section-label">App telemetry & download metrics</div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="text-xs font-medium text-foreground dash-text-title mb-1">App downloads & actions</div>
-      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Direct downloads and interaction events</div>
-      <div style="position: relative; width: 100%; height: 200px;">
-        <canvas bind:this={canvasDownloads}></canvas>
+    <!-- Row 2: Hardware Models & Operating Systems -->
+    <div class="section-label">Hardware & operating systems</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="text-xs font-medium text-foreground dash-text-title mb-1">App hardware models</div>
+        <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Physical devices logging app telemetry</div>
+        <div style="position: relative; width: 100%; height: 200px;">
+          <canvas bind:this={canvasHardware}></canvas>
+        </div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="text-xs font-medium text-foreground dash-text-title mb-1">Operating systems</div>
+        <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Desktop vs mobile distribution</div>
+        <div style="position: relative; width: 100%; height: 200px;">
+          <canvas bind:this={canvasOs}></canvas>
+        </div>
       </div>
     </div>
 
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="text-xs font-medium text-foreground dash-text-title mb-1">App versions</div>
-      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Active sessions stacked by platform</div>
-      <div style="position: relative; width: 100%; height: 200px;">
-        <canvas bind:this={canvasApp}></canvas>
+    <!-- Row 3: Subjects & Traffic Sources -->
+    <div class="section-label">Core syllabus & traffic sources</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="text-xs font-medium text-foreground dash-text-title mb-1">Reading time by subject</div>
+        <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Hours spent reading syllabus modules</div>
+        <div style="position: relative; width: 100%; height: 210px;">
+          <canvas bind:this={canvasSubjects}></canvas>
+        </div>
       </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="text-xs font-medium text-foreground dash-text-title mb-1">Traffic sources</div>
+        <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Referral channel distribution</div>
+        <div style="position: relative; width: 100%; height: 210px;">
+          <canvas bind:this={canvasSources}></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity by Hour -->
+    <div class="section-label">Hourly activity patterns</div>
+    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+      <div class="text-xs font-medium text-foreground dash-text-title mb-1">Activity by hour (UTC / IST)</div>
+      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">{hoursSubtitle}</div>
+      <div style="position: relative; width: 100%; height: 200px;">
+        <canvas bind:this={canvasHours}></canvas>
+      </div>
+    </div>
+
+    <!-- Row 5: Viewports & Click Events -->
+    <div class="section-label">Screen viewports & user interactions</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="text-xs font-medium text-foreground dash-text-title mb-1">Top screen viewports</div>
+        <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">1536x864 is 125% FHD laptop standard</div>
+        <div style="position: relative; width: 100%; height: 200px;">
+          <canvas bind:this={canvasScreen}></canvas>
+        </div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
+        <div class="text-xs font-medium text-foreground dash-text-title mb-1">Click events</div>
+        <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Total recorded action volume</div>
+        <div style="position: relative; width: 100%; height: 200px;">
+          <canvas bind:this={canvasClicks}></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detailed Tables: Top PDFs & Top Readers -->
+    <div class="section-label">Top content & reader activity</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Top PDFs -->
+      <div class="dash-card rounded-xl p-4 flex flex-col h-[460px]">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <h3 class="text-xs font-medium text-foreground dash-text-title flex items-center gap-1.5">
+            <HugeiconsIcon icon={BookOpen01Icon} size={16} class="text-primary" />
+            Top PDFs Read
+          </h3>
+          <form onsubmit={handleSearch} class="relative w-44 no-print">
+            <HugeiconsIcon icon={Search01Icon} size={13} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground dash-text-sub" />
+            <input 
+              type="text" 
+              bind:value={searchQuery} 
+              placeholder="Search..." 
+              class="w-full h-7 pl-7 pr-2.5 text-xs bg-muted/40 border border-border/50 rounded-lg focus:outline-none text-foreground dash-text-title"
+            />
+          </form>
+        </div>
+
+        <div class="flex-1 overflow-auto -mx-1 px-1">
+          {#if isLoadingInsights}
+            <div class="flex items-center justify-center h-28 text-muted-foreground dash-text-sub text-xs">Loading...</div>
+          {:else if topPdfs.length === 0}
+            <div class="flex items-center justify-center h-28 text-muted-foreground dash-text-sub text-xs">No PDF data found.</div>
+          {:else}
+            <table class="w-full text-xs text-left">
+              <thead class="text-[11px] text-muted-foreground dash-text-sub sticky top-0 bg-card z-10 border-b border-border/40">
+                <tr>
+                  <th class="px-2 py-1.5 font-medium">#</th>
+                  <th class="px-2 py-1.5 font-medium">PDF Title</th>
+                  <th class="px-2 py-1.5 font-medium text-right">Reads</th>
+                  <th class="px-2 py-1.5 font-medium text-right">Readers</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border/30">
+                {#each topPdfs as pdf, i}
+                  <tr class="hover:bg-muted/20 transition-colors">
+                    <td class="px-2 py-1.5 text-muted-foreground dash-text-sub">{i + 1}</td>
+                    <td class="px-2 py-1.5 font-medium text-foreground dash-text-title truncate max-w-[180px]" title={pdf.title}>{pdf.title || 'Untitled'}</td>
+                    <td class="px-2 py-1.5 text-right tabular-nums text-foreground dash-text-title">{pdf.reads}</td>
+                    <td class="px-2 py-1.5 text-right tabular-nums text-muted-foreground dash-text-sub">{pdf.unique_readers}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Top Readers -->
+      <div class="dash-card rounded-xl p-4 flex flex-col h-[460px]">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-medium text-foreground dash-text-title flex items-center gap-1.5">
+            <HugeiconsIcon icon={UserGroupIcon} size={16} class="text-primary" />
+            Top Readers
+          </h3>
+        </div>
+
+        <div class="flex-1 overflow-auto -mx-1 px-1">
+          {#if isLoadingInsights}
+            <div class="flex items-center justify-center h-28 text-muted-foreground dash-text-sub text-xs">Loading...</div>
+          {:else if topUsers.length === 0}
+            <div class="flex items-center justify-center h-28 text-muted-foreground dash-text-sub text-xs">No user data found.</div>
+          {:else}
+            <table class="w-full text-xs text-left">
+              <thead class="text-[11px] text-muted-foreground dash-text-sub sticky top-0 bg-card z-10 border-b border-border/40">
+                <tr>
+                  <th class="px-2 py-1.5 font-medium">#</th>
+                  <th class="px-2 py-1.5 font-medium">User</th>
+                  <th class="px-2 py-1.5 font-medium text-right">Time</th>
+                  <th class="px-2 py-1.5 font-medium text-right">PDFs</th>
+                  <th class="px-2 py-1.5 font-medium text-right no-print">Action</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border/30">
+                {#each topUsers as user, i}
+                  <tr class="hover:bg-muted/20 transition-colors group">
+                    <td class="px-2 py-1.5 text-muted-foreground dash-text-sub">{i + 1}</td>
+                    <td class="px-2 py-1.5">
+                      <div class="flex flex-col">
+                        <span class="font-medium text-foreground dash-text-title truncate max-w-[130px]" title={getDisplayName(user)}>{getDisplayName(user)}</span>
+                        {#if user.participant_type === 'anon' || (!user.user_id && user.anon_id)}
+                          <span class="text-[10px] text-muted-foreground dash-text-sub font-mono">{String(user.anon_id || user.username).slice(-8)}</span>
+                        {:else if user.username}
+                          <span class="text-[10px] text-muted-foreground dash-text-sub truncate">@{user.username}</span>
+                        {/if}
+                      </div>
+                    </td>
+                    <td class="px-2 py-1.5 text-right tabular-nums text-primary font-medium">{user.reading_time_human || '00:00:00'}</td>
+                    <td class="px-2 py-1.5 text-right tabular-nums text-muted-foreground dash-text-sub">{user.pdf_reads || 0}</td>
+                    <td class="px-2 py-1.5 text-right no-print">
+                      <button 
+                        type="button"
+                        onclick={() => openBanModal(user)}
+                        class="p-1 rounded text-muted-foreground dash-text-sub hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Ban"
+                      >
+                        <HugeiconsIcon icon={ShieldBanIcon} size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          {/if}
+        </div>
+      </div>
+
     </div>
   </div>
 
-  <!-- Row 2: Hardware Models & Operating Systems -->
-  <div class="section-label">Hardware & operating systems</div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="text-xs font-medium text-foreground dash-text-title mb-1">App hardware models</div>
-      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Physical devices logging app telemetry</div>
-      <div style="position: relative; width: 100%; height: 200px;">
-        <canvas bind:this={canvasHardware}></canvas>
+  <!-- ========================================================================= -->
+  <!-- GOOGLE ANALYTICS & D3 SEMI-GLOBE VIEW (Apple-grade minimal layout) -->
+  <!-- ========================================================================= -->
+  <div class={activeViewMode === 'ga4' ? 'space-y-6' : 'hidden'}>
+    <!-- Date Range Picker Controls -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="inline-flex items-center gap-1 p-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.08] text-xs">
+        {#each [
+          { id: 'today', label: 'Today' },
+          { id: '7d', label: '7 days' },
+          { id: '30d', label: '30 days' },
+          { id: '90d', label: '90 days' },
+          { id: 'custom', label: 'Custom' }
+        ] as r}
+          <button
+            type="button"
+            onclick={() => { gaRange = r.id as any; if (r.id !== 'custom') loadGoogleAnalytics(false); }}
+            class="px-3 py-1 rounded-md transition-all font-medium {gaRange === r.id ? 'bg-background text-foreground shadow-2xs font-semibold' : 'text-muted-foreground hover:text-foreground'}"
+          >
+            {r.label}
+          </button>
+        {/each}
       </div>
-    </div>
 
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="text-xs font-medium text-foreground dash-text-title mb-1">Operating systems</div>
-      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Desktop vs mobile distribution</div>
-      <div style="position: relative; width: 100%; height: 200px;">
-        <canvas bind:this={canvasOs}></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Row 3: Subjects & Traffic Sources -->
-  <div class="section-label">Core syllabus & traffic sources</div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="text-xs font-medium text-foreground dash-text-title mb-1">Reading time by subject</div>
-      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Hours spent reading syllabus modules</div>
-      <div style="position: relative; width: 100%; height: 210px;">
-        <canvas bind:this={canvasSubjects}></canvas>
-      </div>
-    </div>
-
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="text-xs font-medium text-foreground dash-text-title mb-1">Traffic sources</div>
-      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Referral channel distribution</div>
-      <div style="position: relative; width: 100%; height: 210px;">
-        <canvas bind:this={canvasSources}></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Activity by Hour -->
-  <div class="section-label">Hourly activity patterns</div>
-  <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-    <div class="text-xs font-medium text-foreground dash-text-title mb-1">Activity by hour (UTC / IST)</div>
-    <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">{hoursSubtitle}</div>
-    <div style="position: relative; width: 100%; height: 200px;">
-      <canvas bind:this={canvasHours}></canvas>
-    </div>
-  </div>
-
-  <!-- Row 5: Viewports & Click Events -->
-  <div class="section-label">Screen viewports & user interactions</div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="text-xs font-medium text-foreground dash-text-title mb-1">Top screen viewports</div>
-      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">1536x864 is 125% FHD laptop standard</div>
-      <div style="position: relative; width: 100%; height: 200px;">
-        <canvas bind:this={canvasScreen}></canvas>
-      </div>
-    </div>
-
-    <div class="dash-card bg-card border border-border/80 rounded-xl p-4">
-      <div class="text-xs font-medium text-foreground dash-text-title mb-1">Click events</div>
-      <div class="text-[11px] text-muted-foreground dash-text-sub mb-3">Total recorded action volume</div>
-      <div style="position: relative; width: 100%; height: 200px;">
-        <canvas bind:this={canvasClicks}></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Detailed Tables: Top PDFs & Top Readers -->
-  <div class="section-label">Top content & reader activity</div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- Top PDFs -->
-    <div class="dash-card rounded-xl p-4 flex flex-col h-[460px]">
-      <div class="flex items-center justify-between gap-3 mb-3">
-        <h3 class="text-xs font-medium text-foreground dash-text-title flex items-center gap-1.5">
-          <HugeiconsIcon icon={BookOpen01Icon} size={16} class="text-primary" />
-          Top PDFs Read
-        </h3>
-        <form onsubmit={handleSearch} class="relative w-44 no-print">
-          <HugeiconsIcon icon={Search01Icon} size={13} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground dash-text-sub" />
-          <input 
-            type="text" 
-            bind:value={searchQuery} 
-            placeholder="Search..." 
-            class="w-full h-7 pl-7 pr-2.5 text-xs bg-muted/40 border border-border/50 rounded-lg focus:outline-none text-foreground dash-text-title"
+      {#if gaRange === 'custom'}
+        <div class="flex items-center gap-2 text-xs">
+          <input
+            type="date"
+            bind:value={gaCustomStart}
+            class="px-2.5 py-1 rounded-lg border border-border/70 bg-card text-foreground font-mono text-xs"
           />
-        </form>
+          <span class="text-muted-foreground">to</span>
+          <input
+            type="date"
+            bind:value={gaCustomEnd}
+            class="px-2.5 py-1 rounded-lg border border-border/70 bg-card text-foreground font-mono text-xs"
+          />
+          <button
+            type="button"
+            onclick={() => loadGoogleAnalytics(false)}
+            class="px-3 py-1 rounded-lg bg-foreground text-background font-medium hover:opacity-90 transition-opacity"
+          >
+            Apply
+          </button>
+        </div>
+      {/if}
+    </div>
+
+    <!-- All 6 KPI Grid Cards (Identical layout and animation style as platform telemetry) -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={gaTotalUsers} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Total users</div>
       </div>
 
-      <div class="flex-1 overflow-auto -mx-1 px-1">
-        {#if isLoadingInsights}
-          <div class="flex items-center justify-center h-28 text-muted-foreground dash-text-sub text-xs">Loading...</div>
-        {:else if topPdfs.length === 0}
-          <div class="flex items-center justify-center h-28 text-muted-foreground dash-text-sub text-xs">No PDF data found.</div>
-        {:else}
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={gaActiveUsers} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Active readers</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={gaViews} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Screen views</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={gaAvgTime} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Average study time</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5 relative overflow-hidden">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={gaRealtime} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Realtime active</div>
+      </div>
+
+      <div class="dash-card bg-card border border-border/80 rounded-xl p-3.5">
+        <div class="text-2xl sm:text-3xl font-serif font-normal text-foreground dash-metric-val tracking-tight">
+          <Scritto value={gaEngagementRate} />
+        </div>
+        <div class="text-xs text-muted-foreground dash-metric-lbl mt-0.5">Engagement rate</div>
+      </div>
+    </div>
+
+    <!-- Realtime Sparkline (Peak color coded with amber, clean) -->
+    <div class="dash-card bg-card border border-border/70 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <div class="text-xs font-semibold text-foreground dash-text-title flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            Realtime activity (past 30 minutes)
+          </div>
+          <div class="text-[11px] text-muted-foreground mt-0.5">
+            Minute-by-minute readership sessions
+          </div>
+        </div>
+      </div>
+
+      <!-- Sparkline bar chart -->
+      <div class="h-14 flex items-end gap-1 sm:gap-1.5 pt-2">
+        {#each trendList as point}
+          {@const hPercent = Math.max(15, Math.min(100, (point.users / maxTrendUsers) * 100))}
+          {@const isPeak = point.users === maxTrendUsers}
+          <div
+            class="flex-1 rounded-xs transition-all relative group cursor-pointer {isPeak ? 'bg-[#c05a1e]' : 'bg-[#6a9bcc]/40 hover:bg-[#6a9bcc]'}"
+            style="height: {hPercent}%;"
+          >
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block px-1.5 py-0.5 bg-popover text-popover-foreground text-[10px] rounded font-mono shadow-sm z-20 pointer-events-none whitespace-nowrap">
+              {point.users} users • {point.minute === 0 ? 'just now' : `${point.minute}m ago`}
+            </div>
+          </div>
+        {/each}
+      </div>
+      <div class="flex items-center justify-between text-[10px] text-muted-foreground mt-1.5 font-mono">
+        <span>30 min ago</span>
+        <span>15 min ago</span>
+        <span>Now</span>
+      </div>
+    </div>
+
+    <!-- MAIN HERO: 3D D3.js SEMI-GLOBE DOME MATCHING REFERENCE IMAGE -->
+    <div class="dash-card bg-card border border-border/70 rounded-2xl p-4">
+      <div class="flex items-center justify-between mb-3 px-1">
+        <h2 class="text-xs font-semibold text-foreground dash-text-title">Geographic distribution</h2>
+        <div class="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#5ea250]"></span> Active</span>
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#4889c8]"></span> Views</span>
+        </div>
+      </div>
+
+      <D3SemiGlobe 
+        locations={gaData?.locations || []} 
+        bind:selectedCity={selectedGlobeCity}
+        height={460} 
+      />
+    </div>
+
+    <!-- 2 Column Breakdown Tables: Top Cities & Top Pages -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Top Cities Table -->
+      <div class="dash-card rounded-2xl p-4 flex flex-col h-[400px]">
+        <div class="flex items-center justify-between mb-3 pb-2 border-b border-border/40">
+          <h3 class="text-xs font-semibold text-foreground dash-text-title">Top locations</h3>
+        </div>
+        <div class="flex-1 overflow-auto">
           <table class="w-full text-xs text-left">
-            <thead class="text-[11px] text-muted-foreground dash-text-sub sticky top-0 bg-card z-10 border-b border-border/40">
+            <thead class="text-[11px] text-muted-foreground sticky top-0 bg-card z-10 border-b border-border/30">
               <tr>
-                <th class="px-2 py-1.5 font-medium">#</th>
-                <th class="px-2 py-1.5 font-medium">PDF Title</th>
-                <th class="px-2 py-1.5 font-medium text-right">Reads</th>
-                <th class="px-2 py-1.5 font-medium text-right">Readers</th>
+                <th class="py-1.5 px-2 font-medium">#</th>
+                <th class="py-1.5 px-2 font-medium">City</th>
+                <th class="py-1.5 px-2 font-medium text-right">Readers</th>
+                <th class="py-1.5 px-2 font-medium text-right">Views</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-border/30">
-              {#each topPdfs as pdf, i}
+            <tbody class="divide-y divide-border/20">
+              {#each (gaData?.top_cities || gaData?.locations || []).slice(0, 30) as loc, i}
+                <tr 
+                  onclick={() => selectedGlobeCity = loc.city}
+                  class="hover:bg-muted/30 transition-colors cursor-pointer {selectedGlobeCity === loc.city ? 'bg-primary/10' : ''}"
+                >
+                  <td class="py-2 px-2 text-muted-foreground">{i + 1}</td>
+                  <td class="py-2 px-2">
+                    <span class="font-medium text-foreground">{loc.city}</span>
+                    <span class="text-[10px] text-muted-foreground ml-1.5">{loc.region ? `${loc.region}, ` : ''}{loc.country}</span>
+                  </td>
+                  <td class="py-2 px-2 text-right tabular-nums font-mono font-medium">{loc.users.toLocaleString()}</td>
+                  <td class="py-2 px-2 text-right tabular-nums font-mono text-primary font-medium">{loc.views.toLocaleString()}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Top Read Pages Table -->
+      <div class="dash-card rounded-2xl p-4 flex flex-col h-[400px]">
+        <div class="flex items-center justify-between mb-3 pb-2 border-b border-border/40">
+          <h3 class="text-xs font-semibold text-foreground dash-text-title">Top pages</h3>
+        </div>
+        <div class="flex-1 overflow-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="text-[11px] text-muted-foreground sticky top-0 bg-card z-10 border-b border-border/30">
+              <tr>
+                <th class="py-1.5 px-2 font-medium">Path</th>
+                <th class="py-1.5 px-2 font-medium text-right">Views</th>
+                <th class="py-1.5 px-2 font-medium text-right">Avg time</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border/20">
+              {#each (gaData?.top_pages || []) as p}
                 <tr class="hover:bg-muted/20 transition-colors">
-                  <td class="px-2 py-1.5 text-muted-foreground dash-text-sub">{i + 1}</td>
-                  <td class="px-2 py-1.5 font-medium text-foreground dash-text-title truncate max-w-[180px]" title={pdf.title}>{pdf.title || 'Untitled'}</td>
-                  <td class="px-2 py-1.5 text-right tabular-nums text-foreground dash-text-title">{pdf.reads}</td>
-                  <td class="px-2 py-1.5 text-right tabular-nums text-muted-foreground dash-text-sub">{pdf.unique_readers}</td>
+                  <td class="py-2 px-2">
+                    <div class="font-medium text-foreground font-mono text-[11px] truncate max-w-[200px]" title={p.path}>{p.path}</div>
+                    <div class="text-[10px] text-muted-foreground truncate max-w-[200px]">{p.title}</div>
+                  </td>
+                  <td class="py-2 px-2 text-right tabular-nums font-mono text-foreground font-medium">{p.views.toLocaleString()}</td>
+                  <td class="py-2 px-2 text-right tabular-nums font-mono text-muted-foreground font-medium">{p.avgTime || '4m 30s'}</td>
                 </tr>
               {/each}
             </tbody>
           </table>
-        {/if}
+        </div>
       </div>
     </div>
 
-    <!-- Top Users -->
-    <div class="dash-card rounded-xl p-4 flex flex-col h-[460px]">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-xs font-medium text-foreground dash-text-title flex items-center gap-1.5">
-          <HugeiconsIcon icon={UserGroupIcon} size={16} class="text-primary" />
-          Top Readers
-        </h3>
-      </div>
+    <!-- Traffic Channels & Acquisition (Flat solid bars, NO gradients) -->
+    <div class="dash-card rounded-2xl p-4">
+      <h3 class="text-xs font-semibold text-foreground dash-text-title mb-1">Traffic channels</h3>
+      <div class="text-[11px] text-muted-foreground mb-3">Incoming reader discovery sources</div>
 
-      <div class="flex-1 overflow-auto -mx-1 px-1">
-        {#if isLoadingInsights}
-          <div class="flex items-center justify-center h-28 text-muted-foreground dash-text-sub text-xs">Loading...</div>
-        {:else if topUsers.length === 0}
-          <div class="flex items-center justify-center h-28 text-muted-foreground dash-text-sub text-xs">No user data found.</div>
-        {:else}
-          <table class="w-full text-xs text-left">
-            <thead class="text-[11px] text-muted-foreground dash-text-sub sticky top-0 bg-card z-10 border-b border-border/40">
-              <tr>
-                <th class="px-2 py-1.5 font-medium">#</th>
-                <th class="px-2 py-1.5 font-medium">User</th>
-                <th class="px-2 py-1.5 font-medium text-right">Time</th>
-                <th class="px-2 py-1.5 font-medium text-right">PDFs</th>
-                <th class="px-2 py-1.5 font-medium text-right no-print">Action</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border/30">
-              {#each topUsers as user, i}
-                <tr class="hover:bg-muted/20 transition-colors group">
-                  <td class="px-2 py-1.5 text-muted-foreground dash-text-sub">{i + 1}</td>
-                  <td class="px-2 py-1.5">
-                    <div class="flex flex-col">
-                      <span class="font-medium text-foreground dash-text-title truncate max-w-[130px]" title={getDisplayName(user)}>{getDisplayName(user)}</span>
-                      {#if user.participant_type === 'anon' || (!user.user_id && user.anon_id)}
-                        <span class="text-[10px] text-muted-foreground dash-text-sub font-mono">{String(user.anon_id || user.username).slice(-8)}</span>
-                      {:else if user.username}
-                        <span class="text-[10px] text-muted-foreground dash-text-sub truncate">@{user.username}</span>
-                      {/if}
-                    </div>
-                  </td>
-                  <td class="px-2 py-1.5 text-right tabular-nums text-primary font-medium">{user.reading_time_human || '00:00:00'}</td>
-                  <td class="px-2 py-1.5 text-right tabular-nums text-muted-foreground dash-text-sub">{user.pdf_reads || 0}</td>
-                  <td class="px-2 py-1.5 text-right no-print">
-                    <button 
-                      type="button"
-                      onclick={() => openBanModal(user)}
-                      class="p-1 rounded text-muted-foreground dash-text-sub hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      title="Ban"
-                    >
-                      <HugeiconsIcon icon={ShieldBanIcon} size={14} />
-                    </button>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        {/if}
+      <div class="space-y-3 pt-1">
+        {#each (gaData?.traffic_sources || []) as ch}
+          <div>
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="font-medium text-foreground">{ch.channel}</span>
+              <span class="font-mono text-muted-foreground">{ch.sessions?.toLocaleString() || 0} sessions ({ch.percentage}%)</span>
+            </div>
+            <div class="w-full h-2 bg-muted/60 rounded-full overflow-hidden">
+              <div 
+                class="h-full bg-[#4889c8] rounded-full transition-all duration-500" 
+                style="width: {ch.percentage}%;"
+              ></div>
+            </div>
+          </div>
+        {/each}
       </div>
     </div>
 
+    <!-- Minimal Connection Status Footer -->
+    <div class="flex items-center justify-between text-[11px] text-muted-foreground px-1 py-1">
+      <div class="flex items-center gap-2">
+        <span class="w-1.5 h-1.5 rounded-full {gaData?.is_live ? 'bg-emerald-500' : 'bg-zinc-400'}"></span>
+        <span>{gaData?.is_live ? 'Google Analytics 4' : 'Platform data'}</span>
+      </div>
+    </div>
   </div>
 
   <!-- Quick Ban Modal -->

@@ -103,8 +103,8 @@ function initializeCodeBlocks() {
             else if (txt.includes('def ') && txt.includes('print(')) language = 'python';
         }
 
-        // Mermaid, Markmap, Graphviz, Flashcards handling - skip here, handled separately
-        if (['mermaid', 'markmap', 'graphviz', 'dot', 'flashcards'].includes(language)) return;
+        // Mermaid, Markmap, Graphviz, Flashcards, Artifact, Cover handling - skip here, handled separately
+        if (['mermaid', 'markmap', 'graphviz', 'dot', 'flashcards', 'artifact', 'cover'].includes(language)) return;
 
         const content = codeBlock.textContent || '';
         const lineCount = content.trim().split('\n').length;
@@ -1724,6 +1724,33 @@ function initializeMCQSystem() {
 
 export function initializeArtifacts() {
     if (typeof window === 'undefined') return;
+
+    // Transform any ```cover or ```artifact code blocks into artifact containers
+    document.querySelectorAll('pre code').forEach(codeBlock => {
+        const pre = codeBlock.parentElement;
+        if (!pre || pre.dataset.artifactProcessed) return;
+        const className = (codeBlock.className || '') + ' ' + (pre.className || '');
+        const isCoverBlock = className.includes('language-cover') || (codeBlock.textContent || '').trim().startsWith('<!-- cover -->');
+        const isArtifactBlock = className.includes('language-artifact') || isCoverBlock;
+        
+        if (isArtifactBlock) {
+            pre.dataset.artifactProcessed = 'true';
+            const container = document.createElement('div');
+            container.className = 'artifact-container';
+            const template = document.createElement('template');
+            template.innerHTML = codeBlock.textContent || '';
+            container.appendChild(template);
+
+            if (isCoverBlock) {
+                const wrapper = document.createElement('div');
+                wrapper.setAttribute('data-cover-artifact-source', 'true');
+                wrapper.appendChild(container);
+                pre.replaceWith(wrapper);
+            } else {
+                pre.replaceWith(container);
+            }
+        }
+    });
 
     // Process and move cover artifacts if present
     const coverSource = document.querySelector('[data-cover-artifact-source] .artifact-container');
