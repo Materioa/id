@@ -110,12 +110,7 @@ export async function getAllExodusPosts(options: { type?: 'all' | 'changelog' | 
       query.docType = options.type;
     }
 
-    const projection: Record<string, any> = {};
-    if (!options.content) {
-      projection.content = 0;
-    }
-
-    const docs = await col.find(query, { projection }).sort({ date: -1, _id: -1 }).toArray();
+    const docs = await col.find(query, {}).sort({ date: -1, _id: -1 }).toArray();
 
     return docs.map((doc) => mapDocToExodusPost(doc, Boolean(options.content)));
   } catch (err) {
@@ -301,11 +296,18 @@ export async function deleteExodusPost(id: string): Promise<{ success: boolean }
 
   const parts = id.split(':');
   const filename = parts.length >= 3 ? parts[2] : id;
+  const slugFromFilename = filename.replace(/\.md$/, '').replace(/^\d{4}-\d{2}-\d{2}-/, '');
 
   // 1. Delete from MongoDB
   const col = await getExodusCollection();
   await col.deleteOne({
-    $or: [{ id }, { filename }, { slug: id }]
+    $or: [
+      { id },
+      { filename },
+      { slug: id },
+      { slug: filename },
+      { slug: slugFromFilename }
+    ]
   });
 
   // 2. If running locally with local disk present, remove file
