@@ -12,7 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { POSTS_DIR, PAGES_DIR, contentFiles, isStaticRoute, postUrl, pageUrl } from '$lib/server/content.js';
 import { renderMarkdown } from '$lib/server/markdown.js';
-import { getMongoDb } from '$lib/server/mongodb.js';
+import { getMongoDb, withMongoTimeout } from '$lib/server/mongodb.js';
 
 export const prerender = false;
 
@@ -59,27 +59,39 @@ export async function load({ params, setHeaders }) {
     if (setHeaders) {
         setHeaders({ 'cache-control': 'public, max-age=0, must-revalidate' });
     }
-    const rawSlug = params.slug.replace(/\\/$/, '');
+    const rawSlug = String(params.slug || '').replace(/\\/$/, '');
     const cleanSlug = rawSlug.replace(/^(posts|docs|documentation|changelog)\\//, '');
 
     // 1. Try MongoDB first (dynamic and source of truth)
     try {
-        const db = await getMongoDb();
-        const doc = await db.collection('exodus_posts').findOne({
-            $or: [
-                { slug: rawSlug },
-                { slug: cleanSlug },
-                { url: \`/\${rawSlug}\` },
-                { url: rawSlug },
-                { url: \`/\${cleanSlug}\` },
-                { url: cleanSlug },
-                { filename: rawSlug },
-                { filename: \`\${cleanSlug}.md\` }
-            ]
-        });
+        const db = await withMongoTimeout(getMongoDb(), 4000, 'getMongoDb for slug');
+        const doc = await withMongoTimeout(
+            db.collection('exodus_posts').findOne({
+                $or: [
+                    { slug: rawSlug },
+                    { slug: cleanSlug },
+                    { url: \`/\${rawSlug}\` },
+                    { url: rawSlug },
+                    { url: \`/\${cleanSlug}\` },
+                    { url: cleanSlug },
+                    { filename: rawSlug },
+                    { filename: \`\${cleanSlug}.md\` }
+                ]
+            }),
+            4000,
+            'findOne exodus_post'
+        );
 
         if (doc) {
             const isPage = doc.docType === 'legal';
+            let renderedHtml = '';
+            try {
+                renderedHtml = renderMarkdown(doc.content || '', isPage ? { title: doc.title } : {});
+            } catch (renderErr) {
+                console.warn('[renderMarkdown error]:', renderErr);
+                renderedHtml = String(doc.content || '');
+            }
+
             return {
                 metadata: {
                     title: doc.title,
@@ -95,76 +107,82 @@ export async function load({ params, setHeaders }) {
                     permalink: doc.url,
                     ...(doc.metadata || {})
                 },
-                html: renderMarkdown(doc.content || '', isPage ? { title: doc.title } : {}),
+                html: renderedHtml,
                 type: isPage ? 'page' : 'post',
                 layout: 'bare',
                 related: []
             };
         }
     } catch (mongoErr) {
-        console.warn('[Exodus Post Load] Mongo query fallback:', mongoErr.message);
+        console.warn('[Exodus Post Load] Mongo query fallback:', mongoErr?.message || mongoErr);
     }
 
-    // 2. Search local disk posts (legacy fallback)
-    const postsDir = POSTS_DIR;
-    if (fs.existsSync(postsDir)) {
-        const files = contentFiles(postsDir);
-        const index = [];
-        for (const filename of files) {
-            const rawContent = fs.readFileSync(path.join(postsDir, filename), 'utf-8');
-            const slugMatch = filename.match(/^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$/);
-            const extractedSlug = slugMatch ? slugMatch[1] : filename.replace('.md', '');
-            const { data: metadata } = matter(rawContent);
-            index.push({
-                filename,
-                extractedSlug,
-                url: postUrl(metadata, extractedSlug),
-                date: metadata.date ? new Date(metadata.date).getTime() : 0,
-                title: metadata.title || extractedSlug,
-                category: metadata.category || '',
-                excerpt: metadata.excerpt || '',
-                visibility: metadata.visibility || ''
-            });
-        }
-        index.sort((a, b) => b.date - a.date);
-        const at = index.findIndex((entry) => 
-            entry.url === rawSlug || 
-            entry.extractedSlug === rawSlug || 
-            entry.extractedSlug === cleanSlug ||
-            entry.url === cleanSlug
-        );
-        const hit = at >= 0 ? index[at] : null;
-        if (hit) {
-            const rawContent = fs.readFileSync(path.join(postsDir, hit.filename), 'utf-8');
-            const { data: metadata, content } = matter(rawContent);
-            return {
-                metadata,
-                html: renderMarkdown(content),
-                type: 'post',
-                layout: 'bare',
-                related: pickRelated(index, at)
-            };
-        }
-    }
-
-    // 3. Search local disk standalone pages
-    const pagesDir = PAGES_DIR;
-    if (fs.existsSync(pagesDir)) {
-        const pageFiles = contentFiles(pagesDir);
-        for (const filename of pageFiles) {
-            const rawContent = fs.readFileSync(path.join(pagesDir, filename), 'utf-8');
-            const { data: metadata, content } = matter(rawContent);
-            const url = pageUrl(metadata, filename);
-            if (url === rawSlug || url === cleanSlug) {
+    // 2. Safe local disk posts fallback (guarded against edge fs crashes)
+    try {
+        if (typeof fs !== 'undefined' && fs?.existsSync && fs.existsSync(POSTS_DIR)) {
+            const files = contentFiles(POSTS_DIR);
+            const index = [];
+            for (const filename of files) {
+                try {
+                    const rawContent = fs.readFileSync(path.join(POSTS_DIR, filename), 'utf-8');
+                    const slugMatch = filename.match(/^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$/);
+                    const extractedSlug = slugMatch ? slugMatch[1] : filename.replace('.md', '');
+                    const { data: metadata } = matter(rawContent);
+                    index.push({
+                        filename,
+                        extractedSlug,
+                        url: postUrl(metadata, extractedSlug),
+                        date: metadata.date ? new Date(metadata.date).getTime() : 0,
+                        title: metadata.title || extractedSlug,
+                        category: metadata.category || '',
+                        excerpt: metadata.excerpt || '',
+                        visibility: metadata.visibility || ''
+                    });
+                } catch {}
+            }
+            index.sort((a, b) => b.date - a.date);
+            const at = index.findIndex((entry) => 
+                entry.url === rawSlug || 
+                entry.extractedSlug === rawSlug || 
+                entry.extractedSlug === cleanSlug ||
+                entry.url === cleanSlug
+            );
+            const hit = at >= 0 ? index[at] : null;
+            if (hit) {
+                const rawContent = fs.readFileSync(path.join(POSTS_DIR, hit.filename), 'utf-8');
+                const { data: metadata, content } = matter(rawContent);
                 return {
                     metadata,
-                    html: renderMarkdown(content, { title: metadata.title }),
-                    type: 'page',
-                    layout: 'bare'
+                    html: renderMarkdown(content),
+                    type: 'post',
+                    layout: 'bare',
+                    related: pickRelated(index, at)
                 };
             }
         }
-    }
+    } catch {}
+
+    // 3. Safe local disk standalone pages fallback
+    try {
+        if (typeof fs !== 'undefined' && fs?.existsSync && fs.existsSync(PAGES_DIR)) {
+            const pageFiles = contentFiles(PAGES_DIR);
+            for (const filename of pageFiles) {
+                try {
+                    const rawContent = fs.readFileSync(path.join(PAGES_DIR, filename), 'utf-8');
+                    const { data: metadata, content } = matter(rawContent);
+                    const url = pageUrl(metadata, filename);
+                    if (url === rawSlug || url === cleanSlug) {
+                        return {
+                            metadata,
+                            html: renderMarkdown(content, { title: metadata.title }),
+                            type: 'page',
+                            layout: 'bare'
+                        };
+                    }
+                } catch {}
+            }
+        }
+    } catch {}
 
     throw error(404, 'Post or page not found');
 }
@@ -180,7 +198,7 @@ if (fs.existsSync(docsFile)) {
 import fs from 'fs';
 import path from 'path';
 import { POSTS_DIR, contentFiles, postUrl, coverUrl } from '$lib/server/content.js';
-import { getMongoDb } from '$lib/server/mongodb.js';
+import { getMongoDb, withMongoTimeout } from '$lib/server/mongodb.js';
 
 export const prerender = false;
 
@@ -196,15 +214,19 @@ export async function load({ setHeaders }) {
 
     // 1. Load docs from MongoDB
     try {
-        const db = await getMongoDb();
-        const mongoDocs = await db.collection('exodus_posts')
-            .find({ 
-                docType: 'doc',
-                draft: { $ne: true },
-                hidden: { $ne: true }
-            })
-            .sort({ date: -1 })
-            .toArray();
+        const db = await withMongoTimeout(getMongoDb(), 4000, 'getMongoDb for docs');
+        const mongoDocs = await withMongoTimeout(
+            db.collection('exodus_posts')
+                .find({ 
+                    docType: 'doc',
+                    draft: { $ne: true },
+                    hidden: { $ne: true }
+                })
+                .sort({ date: -1 })
+                .toArray(),
+            4000,
+            'find docs'
+        );
 
         for (const d of mongoDocs) {
             seenSlugs.add(d.slug);
@@ -223,40 +245,44 @@ export async function load({ setHeaders }) {
             });
         }
     } catch (e) {
-        console.warn('[Docs Load] Mongo fetch failed, falling back to disk:', e.message);
+        console.warn('[Docs Load] Mongo fetch failed, falling back to disk:', e?.message || e);
     }
 
-    // 2. Load from disk if not already in docs
-    if (fs.existsSync(POSTS_DIR)) {
-        for (const filename of contentFiles(POSTS_DIR)) {
-            const slugMatch = filename.match(/^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$/);
-            const slug = slugMatch ? slugMatch[1] : filename.replace('.md', '');
-            if (seenSlugs.has(slug)) continue;
+    // 2. Safe disk fallback
+    try {
+        if (typeof fs !== 'undefined' && fs?.existsSync && fs.existsSync(POSTS_DIR)) {
+            for (const filename of contentFiles(POSTS_DIR)) {
+                try {
+                    const slugMatch = filename.match(/^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$/);
+                    const slug = slugMatch ? slugMatch[1] : filename.replace('.md', '');
+                    if (seenSlugs.has(slug)) continue;
 
-            const rawContent = fs.readFileSync(path.join(POSTS_DIR, filename), 'utf-8');
-            const { data: metadata, content } = matter(rawContent);
+                    const rawContent = fs.readFileSync(path.join(POSTS_DIR, filename), 'utf-8');
+                    const { data: metadata, content } = matter(rawContent);
 
-            const category = metadata.category || '';
-            const categories = metadata.categories || [];
-            const listed = isDocCategory(category) || categories.some(isDocCategory);
+                    const category = metadata.category || '';
+                    const categories = metadata.categories || [];
+                    const listed = isDocCategory(category) || categories.some(isDocCategory);
 
-            if (listed && metadata.draft !== true && metadata.hidden !== true) {
-                const url = \`/\${postUrl(metadata, slug)}\`;
-                const rawText = content.replace(/<[^>]*>?/gm, '').trim();
-                const excerpt = metadata.excerpt || (rawText.slice(0, 160) + '...');
-                const cover = coverUrl(metadata);
+                    if (listed && metadata.draft !== true && metadata.hidden !== true) {
+                        const url = \`/\${postUrl(metadata, slug)}\`;
+                        const rawText = content.replace(/<[^>]*>?/gm, '').trim();
+                        const excerpt = metadata.excerpt || (rawText.slice(0, 160) + '...');
+                        const cover = coverUrl(metadata);
 
-                docs.push({
-                    ...metadata,
-                    cover,
-                    image: cover,
-                    slug,
-                    url,
-                    excerpt
-                });
+                        docs.push({
+                            ...metadata,
+                            cover,
+                            image: cover,
+                            slug,
+                            url,
+                            excerpt
+                        });
+                    }
+                } catch {}
             }
         }
-    }
+    } catch {}
 
     docs.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
     return { docs };
@@ -273,7 +299,7 @@ if (fs.existsSync(changelogFile)) {
 import fs from 'fs';
 import path from 'path';
 import { POSTS_DIR, contentFiles, postUrl, coverUrl } from '$lib/server/content.js';
-import { getMongoDb } from '$lib/server/mongodb.js';
+import { getMongoDb, withMongoTimeout } from '$lib/server/mongodb.js';
 
 export const prerender = false;
 
@@ -286,16 +312,20 @@ export async function load({ setHeaders }) {
 
     // 1. Load changelogs from MongoDB
     try {
-        const db = await getMongoDb();
-        const mongoLogs = await db.collection('exodus_posts')
-            .find({
-                docType: 'changelog',
-                draft: { $ne: true },
-                hidden: { $ne: true },
-                visibility: { $ne: 'private' }
-            })
-            .sort({ date: -1 })
-            .toArray();
+        const db = await withMongoTimeout(getMongoDb(), 4000, 'getMongoDb for changelog');
+        const mongoLogs = await withMongoTimeout(
+            db.collection('exodus_posts')
+                .find({
+                    docType: 'changelog',
+                    draft: { $ne: true },
+                    hidden: { $ne: true },
+                    visibility: { $ne: 'private' }
+                })
+                .sort({ date: -1 })
+                .toArray(),
+            4000,
+            'find changelog'
+        );
 
         for (const l of mongoLogs) {
             seenSlugs.add(l.slug);
@@ -309,35 +339,39 @@ export async function load({ setHeaders }) {
             });
         }
     } catch (e) {
-        console.warn('[Changelog Load] Mongo fetch failed, falling back to disk:', e.message);
+        console.warn('[Changelog Load] Mongo fetch failed, falling back to disk:', e?.message || e);
     }
 
-    // 2. Load from disk
-    if (fs.existsSync(POSTS_DIR)) {
-        for (const filename of contentFiles(POSTS_DIR)) {
-            const slugMatch = filename.match(/^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$/);
-            const slug = slugMatch ? slugMatch[1] : filename.replace('.md', '');
-            if (seenSlugs.has(slug)) continue;
+    // 2. Safe disk fallback
+    try {
+        if (typeof fs !== 'undefined' && fs?.existsSync && fs.existsSync(POSTS_DIR)) {
+            for (const filename of contentFiles(POSTS_DIR)) {
+                try {
+                    const slugMatch = filename.match(/^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$/);
+                    const slug = slugMatch ? slugMatch[1] : filename.replace('.md', '');
+                    if (seenSlugs.has(slug)) continue;
 
-            const rawContent = fs.readFileSync(path.join(POSTS_DIR, filename), 'utf-8');
-            const { data: metadata, content } = matter(rawContent);
+                    const rawContent = fs.readFileSync(path.join(POSTS_DIR, filename), 'utf-8');
+                    const { data: metadata, content } = matter(rawContent);
 
-            const category = metadata.category || '';
-            const categories = metadata.categories || [];
-            const isLog = category === 'whats-new' || categories.includes('whats-new');
-            if (!isLog || metadata.draft === true || metadata.hidden === true || metadata.visibility === 'private') continue;
+                    const category = metadata.category || '';
+                    const categories = metadata.categories || [];
+                    const isLog = category === 'whats-new' || categories.includes('whats-new');
+                    if (!isLog || metadata.draft === true || metadata.hidden === true || metadata.visibility === 'private') continue;
 
-            const url = \`/\${postUrl(metadata, slug)}\`;
-            const rawText = content.replace(/<[^>]*>?/gm, '').trim();
-            changelogs.push({
-                title: metadata.title || slug,
-                date: metadata.date || null,
-                image: coverUrl(metadata),
-                excerpt: metadata.excerpt || (rawText.slice(0, 320) + '...'),
-                url
-            });
+                    const url = \`/\${postUrl(metadata, slug)}\`;
+                    const rawText = content.replace(/<[^>]*>?/gm, '').trim();
+                    changelogs.push({
+                        title: metadata.title || slug,
+                        date: metadata.date || null,
+                        image: coverUrl(metadata),
+                        excerpt: metadata.excerpt || (rawText.slice(0, 320) + '...'),
+                        url
+                    });
+                } catch {}
+            }
         }
-    }
+    } catch {}
 
     changelogs.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
     return { changelogs };
@@ -353,7 +387,7 @@ if (fs.existsSync(roomFile)) {
   const content = `import matter from 'gray-matter';
 import fs from 'fs';
 import path from 'path';
-import { getMongoDb } from '$lib/server/mongodb.js';
+import { getMongoDb, withMongoTimeout } from '$lib/server/mongodb.js';
 
 export const prerender = false;
 
@@ -366,15 +400,19 @@ export async function load({ setHeaders }) {
 
     // 1. Load from MongoDB
     try {
-        const db = await getMongoDb();
-        const mongoPosts = await db.collection('exodus_posts')
-            .find({
-                draft: { $ne: true },
-                hidden: { $ne: true },
-                visibility: { $ne: 'private' }
-            })
-            .sort({ date: -1 })
-            .toArray();
+        const db = await withMongoTimeout(getMongoDb(), 4000, 'getMongoDb for room');
+        const mongoPosts = await withMongoTimeout(
+            db.collection('exodus_posts')
+                .find({
+                    draft: { $ne: true },
+                    hidden: { $ne: true },
+                    visibility: { $ne: 'private' }
+                })
+                .sort({ date: -1 })
+                .toArray(),
+            4000,
+            'find room posts'
+        );
 
         for (const p of mongoPosts) {
             seenSlugs.add(p.slug);
@@ -403,43 +441,47 @@ export async function load({ setHeaders }) {
             });
         }
     } catch (e) {
-        console.warn('[Room Load] Mongo fetch failed, falling back to disk:', e.message);
+        console.warn('[Room Load] Mongo fetch failed, falling back to disk:', e?.message || e);
     }
 
-    // 2. Fallback / Merge with disk files
-    const postsDir = path.resolve('src/posts');
-    if (fs.existsSync(postsDir)) {
-        const files = fs.readdirSync(postsDir).filter(file => file.endsWith('.md'));
-        
-        for (const filename of files) {
-            const slugMatch = filename.match(/^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$/);
-            let slug = slugMatch ? slugMatch[1] : filename.replace('.md', '');
-            if (seenSlugs.has(slug)) continue;
+    // 2. Safe disk fallback
+    try {
+        const postsDir = path.resolve('src/posts');
+        if (typeof fs !== 'undefined' && fs?.existsSync && fs.existsSync(postsDir)) {
+            const files = fs.readdirSync(postsDir).filter(file => file.endsWith('.md'));
             
-            const rawContent = fs.readFileSync(path.join(postsDir, filename), 'utf-8');
-            const { data: metadata } = matter(rawContent);
-            
-            if (metadata.draft !== true && metadata.hidden !== true && metadata.visibility !== 'private') {
-                let url = metadata.permalink;
-                if (!url) {
-                    if (metadata.category) {
-                        url = \`/\${metadata.category.toLowerCase()}/\${slug}\`;
-                    } else {
-                        url = \`/\${slug}\`;
+            for (const filename of files) {
+                try {
+                    const slugMatch = filename.match(/^\\d{4}-\\d{2}-\\d{2}-(.+)\\.md$/);
+                    let slug = slugMatch ? slugMatch[1] : filename.replace('.md', '');
+                    if (seenSlugs.has(slug)) continue;
+                    
+                    const rawContent = fs.readFileSync(path.join(postsDir, filename), 'utf-8');
+                    const { data: metadata } = matter(rawContent);
+                    
+                    if (metadata.draft !== true && metadata.hidden !== true && metadata.visibility !== 'private') {
+                        let url = metadata.permalink;
+                        if (!url) {
+                            if (metadata.category) {
+                                url = \`/\${metadata.category.toLowerCase()}/\${slug}\`;
+                            } else {
+                                url = \`/\${slug}\`;
+                            }
+                        } else {
+                            url = url.replace(/^\\//, '').replace(/\\/$/, '');
+                            url = \`/\${url}\`;
+                        }
+                        
+                        posts.push({
+                            ...metadata,
+                            slug,
+                            url
+                        });
                     }
-                } else {
-                    url = url.replace(/^\\//, '').replace(/\\/$/, '');
-                    url = \`/\${url}\`;
-                }
-                
-                posts.push({
-                    ...metadata,
-                    slug,
-                    url
-                });
+                } catch {}
             }
         }
-    }
+    } catch {}
     
     // Sort by date descending
     posts.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
@@ -452,6 +494,7 @@ export async function load({ setHeaders }) {
   fs.writeFileSync(roomFile, content, 'utf-8');
   console.log('[patch_exodus] Updated src/routes/room/+page.server.js');
 }
+
 
 // 5. Update svelte.config.js with handleEntryGeneratorMismatch
 const svelteConfigFile = path.join(exodusRoot, 'svelte.config.js');
