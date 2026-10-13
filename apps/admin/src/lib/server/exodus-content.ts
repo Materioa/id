@@ -90,10 +90,11 @@ function mapDocToExodusPost(doc: any, includeContent: boolean = false): ExodusPo
       metadata,
       content: doc.content
     }),
+    cover_home_only: Boolean(doc.cover_home_only ?? metadata.cover_home_only ?? metadata.hide_cover_in_post),
     draft: Boolean(doc.draft ?? metadata.draft),
     hidden: Boolean(doc.hidden ?? metadata.hidden),
     visibility: doc.visibility || metadata.visibility || 'public',
-    url: doc.url || (isPage ? `/${doc.slug}` : doc.docType === 'changelog' ? `/changelog#${doc.slug}` : `/posts/${doc.slug}`),
+    url: doc.url && !doc.url.includes('#') ? doc.url : (isPage ? `/${doc.slug}` : doc.docType === 'changelog' ? `/changelog/${doc.slug}` : `/docs/${doc.slug}`),
     ...(includeContent ? { content: doc.content || '' } : {}),
     metadata,
     filePath: doc.filePath || filename,
@@ -210,8 +211,10 @@ export async function saveExodusPost(payload: {
   let url = isPage
     ? (metadata.permalink || `/${slug}`)
     : docType === 'changelog'
-    ? `/changelog#${slug}`
+    ? (metadata.permalink || `/changelog/${slug}`)
     : (metadata.permalink || `/docs/${slug}`);
+
+  const isCoverHomeOnly = Boolean(metadata.cover_home_only || metadata.hide_cover_in_post);
 
   const frontmatter: Record<string, any> = {
     title,
@@ -225,6 +228,7 @@ export async function saveExodusPost(payload: {
     visibility: metadata.visibility || 'public',
     ...(metadata.draft !== undefined ? { draft: Boolean(metadata.draft) } : {}),
     ...(metadata.hidden !== undefined ? { hidden: Boolean(metadata.hidden) } : {}),
+    ...(isCoverHomeOnly ? { cover_home_only: true, hide_cover_in_post: true } : {}),
     ...(metadata.no_ads !== undefined ? { 'no-ads': Boolean(metadata.no_ads) } : {}),
     ...(metadata.hide_author !== undefined ? { hide_author: Boolean(metadata.hide_author) } : {}),
     ...metadata
@@ -253,7 +257,10 @@ export async function saveExodusPost(payload: {
     categories,
     excerpt: metadata.excerpt || '',
     image: coverImage,
+    cover: coverImage,
     images,
+    cover_home_only: isCoverHomeOnly,
+    hide_cover_in_post: isCoverHomeOnly,
     draft: Boolean(metadata.draft),
     hidden: Boolean(metadata.hidden),
     visibility: metadata.visibility || 'public',

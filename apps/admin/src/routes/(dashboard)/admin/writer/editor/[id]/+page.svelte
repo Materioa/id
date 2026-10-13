@@ -46,6 +46,7 @@
   let date = $state(data.post?.date || new Date().toISOString().split('T')[0]);
   let excerpt = $state(data.post?.excerpt || data.post?.metadata?.excerpt || '');
   let image = $state(data.post?.image || data.post?.metadata?.image || '');
+  let coverHomeOnly = $state(Boolean(data.post?.cover_home_only ?? data.post?.metadata?.cover_home_only ?? data.post?.metadata?.hide_cover_in_post));
   let draft = $state(Boolean(data.post?.draft ?? data.post?.metadata?.draft));
   let hidden = $state(Boolean(data.post?.hidden ?? data.post?.metadata?.hidden));
   let visibility = $state(data.post?.visibility || data.post?.metadata?.visibility || 'public');
@@ -55,7 +56,7 @@
 
   onMount(() => {
     if (data.post?.metadata) {
-      const coreKeys = ['title', 'slug', 'author', 'category', 'date', 'excerpt', 'image', 'visibility', 'hidden', 'draft'];
+      const coreKeys = ['title', 'slug', 'author', 'category', 'date', 'excerpt', 'image', 'visibility', 'hidden', 'draft', 'cover_home_only', 'hide_cover_in_post'];
       const extra: { key: string; value: string }[] = [];
       for (const [k, v] of Object.entries(data.post.metadata)) {
         if (!coreKeys.includes(k) && typeof v !== 'object') {
@@ -113,11 +114,48 @@
     { value: 'legal', label: 'Legal' }
   ];
 
+  function isVideo(url?: string): boolean {
+    if (!url) return false;
+    return /\.(mp4|webm|mov|m4v|ogg)(\?.*)?$/i.test(url) || url.includes('/video/upload/');
+  }
+
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function processVideoShortcodes(md: string): string {
+    return md.replace(/\[video:([^\]]+)\]/g, (_, params) => {
+      const isCover = params.trim().endsWith(':cover');
+      const src = isCover ? params.trim().slice(0, -6).trim() : params.trim();
+      return `<div class="my-4 rounded-xl overflow-hidden border border-border/50 ${isCover ? 'max-h-80' : ''}"><video src="${src}" autoplay muted loop playsinline controls class="w-full h-full object-cover"></video></div>`;
+    });
+  }
+
   // Marked renderer
   const markedInstance = new Marked({ gfm: true, breaks: true });
+  markedInstance.use({
+    renderer: {
+      code({ text, lang }: { text: string; lang?: string }) {
+        if (lang === 'cover') {
+          return `<div data-cover-artifact-source="true" class="mb-6 rounded-xl overflow-hidden border border-border/50 shadow-xs"><div class="artifact-container"><iframe srcdoc="${escapeHtml(text)}" class="w-full h-[360px] border-0" sandbox="allow-scripts allow-same-origin"></iframe></div></div>`;
+        }
+        if (lang === 'artifact') {
+          return `<div class="artifact-container my-4 rounded-xl overflow-hidden border border-border/50 shadow-xs"><iframe srcdoc="${escapeHtml(text)}" class="w-full h-[300px] border-0" sandbox="allow-scripts allow-same-origin"></iframe></div>`;
+        }
+        return false;
+      }
+    }
+  });
+
   let renderedHtml = $derived.by(() => {
     try {
-      return markedInstance.parse(content || '') as string;
+      const processed = processVideoShortcodes(content || '');
+      return markedInstance.parse(processed) as string;
     } catch {
       return '<p class="text-destructive">Error rendering preview.</p>';
     }
@@ -160,6 +198,30 @@
   }
 
   async function uploadMedia(file: File, isCover: boolean = false) {
+    const isVideoFile = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|ogg)$/i.test(file.name);
+    const isHtmlArtifact = file.name.endsWith('.html') || file.name.endsWith('.htm') || file.type === 'text/html';
+
+    // If it's an HTML artifact, read file and insert as ```cover ... ``` or ```artifact ... ```
+    if (isHtmlArtifact) {
+      try {
+        const text = await file.text();
+        const shouldBeCover = isCover || !image || !image.trim();
+        const blockType = shouldBeCover ? 'cover' : 'artifact';
+        insertFormatting(`\n\`\`\`${blockType}\n${text.trim()}\n\`\`\`\n`);
+        if (shouldBeCover) {
+          image = 'artifact';
+          addToast('Artifact inserted & set as cover', 'success');
+        } else {
+          addToast('Artifact inserted', 'success');
+        }
+        markDirty();
+        return;
+      } catch (err: any) {
+        addToast(err.message || 'Error reading artifact file', 'error');
+        return;
+      }
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -174,17 +236,25 @@
       const resData = (await res.json()) as any;
       if (!res.ok || !resData.url) throw new Error(resData.error || 'Upload failed');
 
+      const isVid = isVideoFile || isVideo(resData.url);
+      const shouldBeCover = isCover || !image || !image.trim();
+
       if (isCover) {
         image = resData.url;
-        addToast('Cover image updated', 'success');
+        addToast(`${isVid ? 'Video' : 'Cover image'} updated`, 'success');
       } else {
-        insertFormatting(`\n![${file.name}](${resData.url})\n`);
-        // If no cover image exists yet, make this first uploaded image the cover
-        if (!image || !image.trim()) {
-          image = resData.url;
-          addToast('Image inserted & set as cover', 'success');
+        if (isVid) {
+          insertFormatting(shouldBeCover ? `\n[video:${resData.url}:cover]\n` : `\n[video:${resData.url}]\n`);
         } else {
-          addToast('Image inserted', 'success');
+          insertFormatting(`\n![${file.name}](${resData.url})\n`);
+        }
+
+        // If no cover image exists yet, make this first uploaded media the cover
+        if (shouldBeCover) {
+          image = resData.url;
+          addToast(`${isVid ? 'Video' : 'Image'} inserted & set as cover`, 'success');
+        } else {
+          addToast(`${isVid ? 'Video' : 'Image'} inserted`, 'success');
         }
       }
       markDirty();
@@ -200,7 +270,7 @@
     if (!e.clipboardData) return;
     const items = e.clipboardData.items;
     for (const item of items) {
-      if (item.type.startsWith('image/')) {
+      if (item.type.startsWith('image/') || item.type.startsWith('video/')) {
         const file = item.getAsFile();
         if (file) {
           e.preventDefault();
@@ -216,7 +286,12 @@
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       const file = files[0];
-      if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+      if (
+        file.type.startsWith('image/') ||
+        file.type.startsWith('video/') ||
+        file.name.endsWith('.html') ||
+        file.type === 'text/html'
+      ) {
         e.preventDefault();
         uploadMedia(file, false);
       }
@@ -237,6 +312,20 @@
 
     isSaving = true;
     try {
+      // Auto-detect cover from content if not explicitly set
+      if (!image || !image.trim()) {
+        const coverCodeMatch = content.match(/```(?:cover)\s*\n([\s\S]*?)```/);
+        const videoCoverMatch = content.match(/\[video:([^:\s\]]+)(?::cover)?\]/);
+        const imgMatch = content.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/);
+        if (coverCodeMatch) {
+          image = 'artifact';
+        } else if (videoCoverMatch) {
+          image = videoCoverMatch[1];
+        } else if (imgMatch) {
+          image = imgMatch[1];
+        }
+      }
+
       const metadataPayload: Record<string, any> = {
         author,
         category,
@@ -245,7 +334,8 @@
         image,
         draft,
         hidden,
-        visibility
+        visibility,
+        ...(scope === 'exodus' ? { cover_home_only: coverHomeOnly, hide_cover_in_post: coverHomeOnly } : {})
       };
 
       for (const field of customFields) {
@@ -269,6 +359,7 @@
         draft,
         hidden,
         visibility,
+        ...(scope === 'exodus' ? { cover_home_only: coverHomeOnly, hide_cover_in_post: coverHomeOnly } : {}),
         metadata: metadataPayload
       };
 
@@ -646,10 +737,10 @@
           <HugeiconsIcon icon={TableIcon} size={15} />
         </button>
 
-        <label class="p-1.5 sm:p-1 shrink-0 hover:text-foreground hover:bg-muted/50 rounded transition-colors cursor-pointer inline-flex items-center" title="Upload image">
+        <label class="p-1.5 sm:p-1 shrink-0 hover:text-foreground hover:bg-muted/50 rounded transition-colors cursor-pointer inline-flex items-center" title="Upload media">
           <input
             type="file"
-            accept="image/*,video/*"
+            accept="image/*,video/*,text/html,.html"
             class="hidden"
             onchange={(e) => {
               const files = (e.target as HTMLInputElement).files;
@@ -706,9 +797,13 @@
               {excerpt}
             </p>
           {/if}
-          {#if image}
+          {#if image && image !== 'artifact'}
             <div class="mt-4 rounded-lg overflow-hidden border border-border/50 max-h-60">
-              <img src={image} alt="" class="w-full h-full object-cover" />
+              {#if isVideo(image)}
+                <video src={image} autoplay muted loop playsinline controls class="w-full h-full object-cover"></video>
+              {:else}
+                <img src={image} alt="" class="w-full h-full object-cover" />
+              {/if}
             </div>
           {/if}
         </div>
@@ -839,7 +934,16 @@
 
         {#if image}
           <div class="relative w-full h-28 rounded-lg overflow-hidden border border-border/60 bg-muted/30">
-            <img src={image} alt="Cover preview" class="w-full h-full object-cover" />
+            {#if image === 'artifact'}
+              <div class="w-full h-full flex flex-col items-center justify-center text-xs text-muted-foreground p-3 text-center">
+                <span class="font-medium text-foreground">Interactive Artifact Cover</span>
+                <span class="text-[11px] mt-0.5 opacity-80">Rendered via ```cover``` code block</span>
+              </div>
+            {:else if isVideo(image)}
+              <video src={image} autoplay muted loop playsinline class="w-full h-full object-cover"></video>
+            {:else}
+              <img src={image} alt="Cover preview" class="w-full h-full object-cover" />
+            {/if}
           </div>
         {/if}
 
@@ -849,13 +953,13 @@
             type="text"
             bind:value={image}
             oninput={markDirty}
-            placeholder="https://..."
+            placeholder="https://... or 'artifact'"
             class="flex-1 px-3 py-1.5 bg-background border border-border/60 rounded-lg text-xs font-sans text-foreground focus:outline-none focus:border-foreground/40"
           />
           <label class="px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border/60 rounded-lg cursor-pointer shrink-0">
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,video/*,text/html,.html"
               class="hidden"
               onchange={(e) => {
                 const files = (e.target as HTMLInputElement).files;
@@ -947,6 +1051,15 @@
             </div>
             <input type="checkbox" bind:checked={hidden} onchange={markDirty} class="rounded border-border text-primary focus:ring-0 h-4 w-4" />
           </label>
+          {#if scope === 'exodus'}
+            <label class="flex items-center justify-between cursor-pointer py-1">
+              <div>
+                <span class="text-foreground font-medium block">Cover in lists only</span>
+                <span class="text-[11px] text-muted-foreground block">Show on home/index cards, hide inside the post</span>
+              </div>
+              <input type="checkbox" bind:checked={coverHomeOnly} onchange={markDirty} class="rounded border-border text-primary focus:ring-0 h-4 w-4" />
+            </label>
+          {/if}
         </div>
       </div>
 
