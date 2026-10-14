@@ -8,7 +8,8 @@
   import LineArtBackground from '$lib/components/LineArtBackground.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import BudLogo from '@materio/ui/components/BudLogo.svelte';
-  import { ArrowLeft } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { ArrowLeft02Icon } from '@hugeicons/core-free-icons';
 
   let email = $state('');
   let isLoading = $state(false);
@@ -154,7 +155,7 @@
               href={signInHref()}
               class="text-xs text-muted-foreground hover:text-foreground transition-colors py-1 flex items-center gap-1.5 cursor-pointer"
             >
-              <ArrowLeft class="w-3.5 h-3.5" />
+              <HugeiconsIcon icon={ArrowLeft02Icon} size={14} />
               <span>Back to sign in</span>
             </a>
           </div>

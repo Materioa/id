@@ -8,8 +8,18 @@
   import { getAppUrls } from '@materio/config';
   import Checkbox from '$lib/components/Checkbox.svelte';
   import Dropdown from '$lib/components/Dropdown.svelte';
-  import { Eye, EyeOff } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { AlertCircleIcon, ViewIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons';
   import { detectGender, generateDicebearAvatarUrl, type Gender } from '$lib/avatar';
+  import {
+    normalizeName,
+    validateName,
+    normalizeUsername,
+    validateUsername,
+    sanitizeField,
+    hasLayoutBreakingChars,
+    stripLayoutBreakingChars
+  } from '$lib/sanitizer';
 
   // State
   let step = $state('registration'); // 'registration' | 'verification'
@@ -31,10 +41,21 @@
   let otpValues = $state(['', '', '', '', '', '']);
   let terms = $state(true);
   
-  // UI State
+  // UI & Error State
   let isLoading = $state(false);
   let errorMsg = $state('');
   let successMsg = $state('');
+  let fieldErrors = $state<Record<string, string>>({
+    displayName: '',
+    username: '',
+    currentYear: '',
+    passoutYear: '',
+    specialization: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    otp: ''
+  });
   
   // Avatar logic
   let profilePicture = $state('');
@@ -85,38 +106,172 @@
     })
   );
 
-  // Auto-calculate passout year
+  // Auto-calculate passout year:
+  // In academic cycle (e.g. 2026-2027), 4th year means 2027, 3rd year means 2028, etc.
   $effect(() => {
     if (currentYear) {
       const year = parseInt(currentYear);
       if (!isNaN(year)) {
-        const calculatedYear = new Date().getFullYear() + (4 - year);
+        const now = new Date();
+        const baseGradYear = now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear();
+        const calculatedYear = baseGradYear + (4 - year);
         passoutYear = calculatedYear.toString();
+        fieldErrors.passoutYear = '';
       }
     }
   });
 
+  // Real-time input sanitation and validations
+  function handleDisplayNameInput() {
+    if (hasLayoutBreakingChars(displayName)) {
+      displayName = stripLayoutBreakingChars(displayName);
+    }
+    if (displayName.trim()) {
+      const res = validateName(displayName);
+      fieldErrors.displayName = res.valid ? '' : (res.error || '');
+    } else {
+      fieldErrors.displayName = '';
+    }
+  }
+
+  function handleDisplayNameBlur() {
+    if (displayName.trim()) {
+      // Normalize: Title Case, drop middle names if multiple
+      displayName = normalizeName(displayName);
+      const res = validateName(displayName);
+      fieldErrors.displayName = res.valid ? '' : (res.error || '');
+    }
+  }
+
+  function handleUsernameInput() {
+    if (hasLayoutBreakingChars(username)) {
+      username = stripLayoutBreakingChars(username);
+    }
+    if (username.trim()) {
+      const res = validateUsername(username);
+      fieldErrors.username = res.valid ? '' : (res.error || '');
+    } else {
+      fieldErrors.username = '';
+    }
+  }
+
+  function handleUsernameBlur() {
+    if (username.trim()) {
+      username = normalizeUsername(username);
+      const res = validateUsername(username);
+      fieldErrors.username = res.valid ? '' : (res.error || '');
+    }
+  }
+
+  function handleEmailInput() {
+    email = sanitizeField(email);
+    if (email.trim()) {
+      const normalized = email.trim().toLowerCase();
+      if (!normalized.endsWith('@paruluniversity.ac.in') && !normalized.endsWith('@getmaterio.app')) {
+        fieldErrors.email = 'Use your university email (@paruluniversity.ac.in)';
+      } else {
+        fieldErrors.email = '';
+      }
+    } else {
+      fieldErrors.email = '';
+    }
+  }
+
+  function handlePasswordInput() {
+    if (password && password.length < 8) {
+      fieldErrors.password = 'Password must be at least 8 characters';
+    } else {
+      fieldErrors.password = '';
+    }
+    if (confirmPassword && password !== confirmPassword) {
+      fieldErrors.confirmPassword = 'Passwords do not match';
+    } else if (confirmPassword) {
+      fieldErrors.confirmPassword = '';
+    }
+  }
+
+  function handleConfirmPasswordInput() {
+    if (confirmPassword && password !== confirmPassword) {
+      fieldErrors.confirmPassword = 'Passwords do not match';
+    } else {
+      fieldErrors.confirmPassword = '';
+    }
+  }
+
+  function handlePassoutYearInput() {
+    passoutYear = sanitizeField(passoutYear);
+    if (passoutYear && (!/^\d{4}$/.test(passoutYear) || parseInt(passoutYear) < 2020 || parseInt(passoutYear) > 2040)) {
+      fieldErrors.passoutYear = 'Enter a valid 4-digit graduation year';
+    } else {
+      fieldErrors.passoutYear = '';
+    }
+  }
+
   async function handleSendOtp() {
     errorMsg = '';
     
-    if (!username || !displayName || !email || !password || !currentYear || !specialization) {
-      errorMsg = 'Please fill all required fields';
-      return;
-    }
-    
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail.endsWith('@paruluniversity.ac.in') && !normalizedEmail.endsWith('@getmaterio.app')) {
-      errorMsg = 'Use your university email address';
-      return;
+    // Normalize and sanitize fields prior to submission
+    displayName = normalizeName(displayName);
+    username = normalizeUsername(username);
+    email = sanitizeField(email).toLowerCase();
+    passoutYear = sanitizeField(passoutYear);
+
+    const nameRes = validateName(displayName);
+    const userRes = validateUsername(username);
+
+    fieldErrors.displayName = nameRes.valid ? '' : (nameRes.error || '');
+    fieldErrors.username = userRes.valid ? '' : (userRes.error || '');
+
+    if (!displayName) fieldErrors.displayName = 'Name is required';
+    if (!username) fieldErrors.username = 'Username is required';
+
+    if (!currentYear) {
+      fieldErrors.currentYear = 'Please select current year';
+    } else {
+      fieldErrors.currentYear = '';
     }
 
-    if (password.length < 8) {
-      errorMsg = 'Password must be at least 8 characters';
-      return;
+    if (!passoutYear) {
+      fieldErrors.passoutYear = 'Passout year is required';
+    } else if (!/^\d{4}$/.test(passoutYear)) {
+      fieldErrors.passoutYear = 'Enter a valid 4-digit graduation year';
+    } else {
+      fieldErrors.passoutYear = '';
     }
 
-    if (password !== confirmPassword) {
-      errorMsg = 'Passwords do not match';
+    if (!specialization) {
+      fieldErrors.specialization = 'Please select specialization';
+    } else {
+      fieldErrors.specialization = '';
+    }
+
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      fieldErrors.email = 'University email is required';
+    } else if (!normalizedEmail.endsWith('@paruluniversity.ac.in') && !normalizedEmail.endsWith('@getmaterio.app')) {
+      fieldErrors.email = 'Use your university email address (@paruluniversity.ac.in)';
+    } else {
+      fieldErrors.email = '';
+    }
+
+    if (!password) {
+      fieldErrors.password = 'Password is required';
+    } else if (password.length < 8) {
+      fieldErrors.password = 'Password must be at least 8 characters';
+    } else {
+      fieldErrors.password = '';
+    }
+
+    if (!confirmPassword) {
+      fieldErrors.confirmPassword = 'Confirm your password';
+    } else if (password !== confirmPassword) {
+      fieldErrors.confirmPassword = 'Passwords do not match';
+    } else {
+      fieldErrors.confirmPassword = '';
+    }
+
+    const hasErrors = Object.values(fieldErrors).some(Boolean);
+    if (hasErrors) {
       return;
     }
 
@@ -147,6 +302,7 @@
   async function handleResendOtp() {
     try {
       successMsg = '';
+      errorMsg = '';
       const res = await fetch('/api/v2/auth?action=otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -171,6 +327,7 @@
     }
     
     otpValues[index] = val;
+    fieldErrors.otp = '';
     
     // Auto advance
     if (val && index < 5) {
@@ -198,6 +355,7 @@
         if (input) input.value = char;
       }
     });
+    fieldErrors.otp = '';
     
     const nextIndex = Math.min(data.length, 5);
     const nextInput = document.querySelector(`input[data-index="${nextIndex}"]`) as HTMLInputElement;
@@ -206,10 +364,11 @@
 
   async function handleFinalSignup(e: Event) {
     e.preventDefault();
+    fieldErrors.otp = '';
     
     const otpCode = otpValues.join('');
     if (otpCode.length < 6) {
-      errorMsg = 'Please enter 6-digit code';
+      fieldErrors.otp = 'Please enter complete 6-digit code';
       return;
     }
 
@@ -227,8 +386,8 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          username,
-          displayName,
+          username: normalizeUsername(username),
+          displayName: normalizeName(displayName),
           email: email.trim().toLowerCase(), 
           password,
           branch,
@@ -304,14 +463,16 @@
         <p class="text-muted-foreground text-[15px]">Complete your registration.</p>
       </div>
 
+      <!-- General Minimal Alerts (Not wrapped in card) -->
       {#if errorMsg}
-        <div class="mb-6 p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-lg text-center font-medium">
-          {errorMsg}
+        <div class="mb-5 flex items-center justify-center gap-1.5 text-xs sm:text-[13px] text-red-500 font-medium text-center">
+          <HugeiconsIcon icon={AlertCircleIcon} size={15} class="shrink-0 text-red-500" />
+          <span>{errorMsg}</span>
         </div>
       {/if}
       {#if successMsg}
-        <div class="mb-6 p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-sm rounded-lg text-center font-medium">
-          {successMsg}
+        <div class="mb-5 flex items-center justify-center gap-1.5 text-xs sm:text-[13px] text-emerald-600 font-medium text-center">
+          <span>{successMsg}</span>
         </div>
       {/if}
 
@@ -349,17 +510,37 @@
                 <label for="displayName" class="text-[13px] font-semibold text-foreground/80">Enter your name</label>
                 <input 
                   id="displayName"
-                  type="text" bind:value={displayName} placeholder="John Doe"
-                  class="w-full bg-transparent border border-border/80 text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-md text-[15px]"
+                  type="text" 
+                  bind:value={displayName} 
+                  oninput={handleDisplayNameInput}
+                  onblur={handleDisplayNameBlur}
+                  placeholder="John Doe"
+                  class="w-full bg-transparent border {fieldErrors.displayName ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' : 'border-border/80 focus:border-primary focus:ring-1 focus:ring-primary'} text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none transition-all rounded-md text-[15px]"
                 />
+                {#if fieldErrors.displayName}
+                  <div class="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-0.5">
+                    <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                    <span>{fieldErrors.displayName}</span>
+                  </div>
+                {/if}
               </div>
               <div class="space-y-1.5">
                 <label for="username" class="text-[13px] font-semibold text-foreground/80">Username</label>
                 <input 
                   id="username"
-                  type="text" bind:value={username} placeholder="johndoe"
-                  class="w-full bg-transparent border border-border/80 text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-md text-[15px]"
+                  type="text" 
+                  bind:value={username} 
+                  oninput={handleUsernameInput}
+                  onblur={handleUsernameBlur}
+                  placeholder="johndoe"
+                  class="w-full bg-transparent border {fieldErrors.username ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' : 'border-border/80 focus:border-primary focus:ring-1 focus:ring-primary'} text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none transition-all rounded-md text-[15px]"
                 />
+                {#if fieldErrors.username}
+                  <div class="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-0.5">
+                    <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                    <span>{fieldErrors.username}</span>
+                  </div>
+                {/if}
               </div>
             </div>
           </div>
@@ -387,14 +568,29 @@
                   { value: '4', label: '4th Year' }
                 ]}
               />
+              {#if fieldErrors.currentYear}
+                <div class="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-0.5">
+                  <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                  <span>{fieldErrors.currentYear}</span>
+                </div>
+              {/if}
             </div>
             <div class="space-y-1.5">
               <label for="passoutYear" class="text-[13px] font-semibold text-foreground/80">Passout Year</label>
               <input 
                 id="passoutYear"
-                type="number" bind:value={passoutYear} placeholder="2027"
-                class="w-full bg-transparent border border-border/80 text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-md text-[15px]"
+                type="number" 
+                bind:value={passoutYear} 
+                oninput={handlePassoutYearInput}
+                placeholder="2027"
+                class="w-full bg-transparent border {fieldErrors.passoutYear ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' : 'border-border/80 focus:border-primary focus:ring-1 focus:ring-primary'} text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none transition-all rounded-md text-[15px]"
               />
+              {#if fieldErrors.passoutYear}
+                <div class="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-0.5">
+                  <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                  <span>{fieldErrors.passoutYear}</span>
+                </div>
+              {/if}
             </div>
           </div>
 
@@ -414,15 +610,30 @@
                 { value: 'Cloud computing', label: 'Cloud Computing' }
               ]}
             />
+            {#if fieldErrors.specialization}
+              <div class="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-0.5">
+                <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                <span>{fieldErrors.specialization}</span>
+              </div>
+            {/if}
           </div>
 
           <div class="space-y-1.5">
             <label for="email" class="text-[13px] font-semibold text-foreground/80">University Email</label>
             <input 
               id="email"
-              type="email" bind:value={email} placeholder="23...001@paruluniversity.ac.in"
-              class="w-full bg-transparent border border-border/80 text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-md text-[15px]"
+              type="email" 
+              bind:value={email} 
+              oninput={handleEmailInput}
+              placeholder="23...001@paruluniversity.ac.in"
+              class="w-full bg-transparent border {fieldErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' : 'border-border/80 focus:border-primary focus:ring-1 focus:ring-primary'} text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none transition-all rounded-md text-[15px]"
             />
+            {#if fieldErrors.email}
+              <div class="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-0.5">
+                <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                <span>{fieldErrors.email}</span>
+              </div>
+            {/if}
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -431,8 +642,11 @@
               <div class="relative">
                 <input 
                   id="password"
-                  type={showPassword ? "text" : "password"} bind:value={password} placeholder="••••••••"
-                  class="w-full bg-transparent border border-border/80 text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-md text-[15px] pr-10"
+                  type={showPassword ? "text" : "password"} 
+                  bind:value={password} 
+                  oninput={handlePasswordInput}
+                  placeholder="••••••••"
+                  class="w-full bg-transparent border {fieldErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' : 'border-border/80 focus:border-primary focus:ring-1 focus:ring-primary'} text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none transition-all rounded-md text-[15px] pr-10"
                 />
                 <button 
                   type="button" 
@@ -440,20 +654,29 @@
                   class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {#if showPassword}
-                    <EyeOff class="w-4 h-4" />
+                    <HugeiconsIcon icon={ViewOffSlashIcon} size={16} />
                   {:else}
-                    <Eye class="w-4 h-4" />
+                    <HugeiconsIcon icon={ViewIcon} size={16} />
                   {/if}
                 </button>
               </div>
+              {#if fieldErrors.password}
+                <div class="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-0.5">
+                  <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                  <span>{fieldErrors.password}</span>
+                </div>
+              {/if}
             </div>
             <div class="space-y-1.5">
               <label for="confirmPassword" class="text-[13px] font-semibold text-foreground/80">Confirm</label>
               <div class="relative">
                 <input 
                   id="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"} bind:value={confirmPassword} placeholder="••••••••"
-                  class="w-full bg-transparent border border-border/80 text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all rounded-md text-[15px] pr-10"
+                  type={showConfirmPassword ? "text" : "password"} 
+                  bind:value={confirmPassword} 
+                  oninput={handleConfirmPasswordInput}
+                  placeholder="••••••••"
+                  class="w-full bg-transparent border {fieldErrors.confirmPassword ? 'border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500' : 'border-border/80 focus:border-primary focus:ring-1 focus:ring-primary'} text-foreground placeholder:text-muted-foreground px-4 py-3 outline-none transition-all rounded-md text-[15px] pr-10"
                 />
                 <button 
                   type="button" 
@@ -461,12 +684,18 @@
                   class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {#if showConfirmPassword}
-                    <EyeOff class="w-4 h-4" />
+                    <HugeiconsIcon icon={ViewOffSlashIcon} size={16} />
                   {:else}
-                    <Eye class="w-4 h-4" />
+                    <HugeiconsIcon icon={ViewIcon} size={16} />
                   {/if}
                 </button>
               </div>
+              {#if fieldErrors.confirmPassword}
+                <div class="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-0.5">
+                  <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                  <span>{fieldErrors.confirmPassword}</span>
+                </div>
+              {/if}
             </div>
           </div>
 
@@ -507,10 +736,17 @@
                   oninput={(e) => handleOtpInput(e, i)}
                   onkeydown={(e) => handleOtpKeydown(e, i)}
                   onpaste={i === 0 ? handleOtpPaste : null}
-                  class="w-10 h-12 sm:w-12 sm:h-14 bg-muted/30 border border-border text-foreground text-center text-xl font-bold rounded-lg outline-none focus:border-[#ff5400] focus:ring-1 focus:ring-[#ff5400] transition-all"
+                  class="w-10 h-12 sm:w-12 sm:h-14 bg-muted/30 border {fieldErrors.otp ? 'border-red-500' : 'border-border'} text-foreground text-center text-xl font-bold rounded-lg outline-none focus:border-[#ff5400] focus:ring-1 focus:ring-[#ff5400] transition-all"
                 />
               {/each}
             </div>
+
+            {#if fieldErrors.otp}
+              <div class="flex items-center justify-center gap-1.5 text-xs text-red-500 font-medium">
+                <HugeiconsIcon icon={AlertCircleIcon} size={14} class="shrink-0 text-red-500" />
+                <span>{fieldErrors.otp}</span>
+              </div>
+            {/if}
 
             <div class="text-center">
               <button 

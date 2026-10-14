@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import { env } from '$env/dynamic/private';
 import { slugify, extractPostImagesList } from './insightroom-posts';
 import { getDb, getInsightroomDb } from './mongo';
+import { generatePostSeo } from './seo';
 
 export type ExodusDocType = 'changelog' | 'doc' | 'legal';
 
@@ -215,12 +216,34 @@ export async function saveExodusPost(payload: {
     : (metadata.permalink || `/docs/${slug}`);
 
   const isCoverHomeOnly = Boolean(metadata.cover_home_only || metadata.hide_cover_in_post);
+  const coverImage = metadata.image || metadata.cover || '';
+
+  // Generate best SEO from content when public and not hidden/draft/private/unlisted
+  const seoResult = generatePostSeo({
+    title,
+    slug,
+    content,
+    category: finalCategory,
+    categories,
+    excerpt: metadata.excerpt,
+    image: coverImage,
+    author: savedByName || 'Materio',
+    scope: 'exodus',
+    docType,
+    url,
+    draft: Boolean(metadata.draft),
+    hidden: Boolean(metadata.hidden),
+    visibility: metadata.visibility || 'public',
+    metadata
+  });
+
+  const finalExcerpt = seoResult.excerpt || metadata.excerpt || '';
 
   const frontmatter: Record<string, any> = {
     title,
     layout: 'post',
-    ...(metadata.excerpt ? { excerpt: metadata.excerpt } : {}),
-    ...(metadata.image ? { image: metadata.image } : {}),
+    ...(finalExcerpt ? { excerpt: finalExcerpt } : {}),
+    ...(coverImage ? { image: coverImage } : {}),
     category: finalCategory,
     ...(categories.length > 0 ? { categories } : {}),
     ...(isPage ? { permalink: metadata.permalink || `/${slug}` } : {}),
@@ -231,12 +254,12 @@ export async function saveExodusPost(payload: {
     ...(isCoverHomeOnly ? { cover_home_only: true, hide_cover_in_post: true } : {}),
     ...(metadata.no_ads !== undefined ? { 'no-ads': Boolean(metadata.no_ads) } : {}),
     ...(metadata.hide_author !== undefined ? { hide_author: Boolean(metadata.hide_author) } : {}),
-    ...metadata
+    ...metadata,
+    ...seoResult.metadataPatch
   };
 
   delete frontmatter.categories_list;
 
-  const coverImage = metadata.image || metadata.cover || '';
   const images = extractPostImagesList({
     image: coverImage,
     metadata: frontmatter,
@@ -255,7 +278,7 @@ export async function saveExodusPost(payload: {
     date: dateStr,
     category: finalCategory,
     categories,
-    excerpt: metadata.excerpt || '',
+    excerpt: finalExcerpt,
     image: coverImage,
     cover: coverImage,
     images,
@@ -267,6 +290,7 @@ export async function saveExodusPost(payload: {
     url,
     content: content || '',
     metadata: JSON.parse(JSON.stringify(frontmatter)),
+    seo: seoResult.seo,
     updated_at: new Date()
   };
 

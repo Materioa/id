@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import {
+    CheckmarkCircle01Icon,
+    AlertCircleIcon,
+    InformationCircleIcon,
+    TriangleAlertIcon,
+    Cancel01Icon
+  } from '@hugeicons/core-free-icons';
   import { slide } from 'svelte/transition';
 
   let { 
@@ -20,13 +27,13 @@
   };
 
   const icons = {
-    success: CheckCircle2,
-    error: AlertCircle,
-    warning: AlertTriangle,
-    info: Info
+    success: CheckmarkCircle01Icon,
+    error: AlertCircleIcon,
+    warning: TriangleAlertIcon,
+    info: InformationCircleIcon
   };
 
-  const IconComponent = $derived(icons[type as keyof typeof icons] || Info);
+  const iconComponent = $derived(icons[type as keyof typeof icons] || InformationCircleIcon);
 </script>
 
 {#if isVisible}
@@ -35,7 +42,7 @@
     transition:slide={{ duration: 200 }}
     role="alert"
   >
-    <IconComponent class="w-5 h-5 shrink-0 mt-0.5" />
+    <HugeiconsIcon icon={iconComponent} size={20} class="shrink-0 mt-0.5" />
     <div class="flex-1">
       {#if title}
         <h5 class="font-semibold tracking-tight text-foreground">{title}</h5>
@@ -51,7 +58,7 @@
         class="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
         aria-label="Dismiss alert"
       >
-        <X class="w-4 h-4" />
+        <HugeiconsIcon icon={Cancel01Icon} size={16} />
       </button>
     {/if}
   </div>

@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { resolveAttribution } from '$lib/server/insightroom-attribution';
 import { getPostAnalytics, getGeneralAnalytics } from '$lib/server/insightroom-analytics';
 import { styleGuidelines } from '$lib/server/insightroom-guidelines';
+import { generatePostSeo } from '$lib/server/seo';
 
 // In-memory registry of active SSE streams
 const activeSessions = new Map<string, ReadableStreamDefaultController>();
@@ -602,10 +603,31 @@ async function handleToolCall(name: string, args: any, currentUser: any, request
       const categorySlug = draft ? 'draft' : slugify(category);
       metadata.category = category;
       const date = metadata.date || new Date().toISOString().split('T')[0];
-      const excerpt = metadata.excerpt || '';
       const image = metadata.image || '';
       const hidden = Boolean(metadata.hidden);
       const visibility = metadata.visibility || 'public';
+
+      // Generate best SEO from content when public and indexable
+      const seoResult = generatePostSeo({
+        title,
+        slug,
+        content,
+        category,
+        excerpt: metadata.excerpt,
+        image,
+        scope: 'room',
+        url: `/${categorySlug || 'post'}/${slug}`,
+        draft,
+        hidden,
+        visibility,
+        metadata
+      });
+
+      metadata = {
+        ...metadata,
+        ...seoResult.metadataPatch
+      };
+      const excerpt = seoResult.excerpt || metadata.excerpt || '';
 
       const result = await collection.insertOne({
         title,
@@ -735,6 +757,35 @@ async function handleToolCall(name: string, args: any, currentUser: any, request
           updateDoc.metadata.category = updateDoc.category;
         }
         if (newMetadata.hidden !== undefined) updateDoc.hidden = Boolean(newMetadata.hidden);
+      }
+
+      // Re-evaluate SEO from content
+      const finalTitle = title !== undefined ? title : oldPost.title;
+      const finalSlug = slug !== undefined ? slugify(slug) : oldPost.slug;
+      const finalContent = content !== undefined ? content : oldPost.content;
+      const finalMetadata = { ...(oldPost.metadata || {}), ...(metadata || {}) };
+
+      const seoResult = generatePostSeo({
+        title: finalTitle,
+        slug: finalSlug,
+        content: finalContent,
+        category: updateDoc.category || oldPost.category,
+        excerpt: finalMetadata.excerpt,
+        image: updateDoc.image || oldPost.image,
+        scope: 'room',
+        url: `/${updateDoc.categorySlug || oldPost.categorySlug || 'post'}/${finalSlug}`,
+        draft: updateDoc.draft !== undefined ? updateDoc.draft : oldPost.draft,
+        hidden: updateDoc.hidden !== undefined ? updateDoc.hidden : oldPost.hidden,
+        visibility: updateDoc.visibility || oldPost.visibility,
+        metadata: finalMetadata
+      });
+
+      updateDoc.metadata = {
+        ...finalMetadata,
+        ...seoResult.metadataPatch
+      };
+      if (seoResult.excerpt && !updateDoc.excerpt) {
+        updateDoc.excerpt = seoResult.excerpt;
       }
 
       updateDoc.updated_at = new Date();

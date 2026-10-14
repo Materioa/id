@@ -5,6 +5,7 @@ import { getInsightroomDb } from '$lib/server/mongo';
 import { ObjectId } from 'mongodb';
 import { validateToken, getCookieToken } from '$lib/server/insightroom-auth';
 import { resolveAttribution } from '$lib/server/insightroom-attribution';
+import { generatePostSeo } from '$lib/server/seo';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -115,10 +116,32 @@ export const POST: RequestHandler = async ({ request, cookies, fetch }) => {
     const categorySlug = slugify(category);
     metadata.category = category;
     const date = metadata.date || new Date().toISOString().split('T')[0];
-    const excerpt = metadata.excerpt || '';
     const image = metadata.image || '';
     const hidden = Boolean(metadata.hidden);
     const visibility = metadata.visibility || 'public';
+
+    // Generate best SEO from content when public and indexable
+    const seoResult = generatePostSeo({
+      title,
+      slug,
+      content,
+      category,
+      excerpt: metadata.excerpt,
+      image,
+      author: attribution.displayName || attribution.name,
+      scope: 'room',
+      url: `/${categorySlug || 'post'}/${slug}`,
+      draft,
+      hidden,
+      visibility,
+      metadata
+    });
+
+    metadata = {
+      ...metadata,
+      ...seoResult.metadataPatch
+    };
+    const excerpt = seoResult.excerpt || metadata.excerpt || '';
 
     const collection = await getPostsCollection();
     const db = await getInsightroomDb();

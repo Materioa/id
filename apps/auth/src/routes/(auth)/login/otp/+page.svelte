@@ -10,7 +10,8 @@
   import LineArtBackground from '$lib/components/LineArtBackground.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import BudLogo from '@materio/ui/components/BudLogo.svelte';
-  import { ShieldAlert, ArrowLeft } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { ShieldAlertIcon, ArrowLeft02Icon } from '@hugeicons/core-free-icons';
   
   let email = $state('');
   let otpCode = $state('');
@@ -205,7 +206,7 @@
       {#if isSuspended}
         <div class="text-center space-y-5">
           <div class="mx-auto w-12 h-12 text-destructive flex items-center justify-center bg-destructive/10 rounded-full">
-            <ShieldAlert class="w-6 h-6" />
+            <HugeiconsIcon icon={ShieldAlertIcon} size={24} />
           </div>
 
           <div class="space-y-2">
@@ -335,7 +336,7 @@
             href="/login"
             class="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5"
           >
-            <ArrowLeft class="w-3.5 h-3.5" />
+            <HugeiconsIcon icon={ArrowLeft02Icon} size={14} />
             <span>Back to Materio ID Login</span>
           </a>
         </div>

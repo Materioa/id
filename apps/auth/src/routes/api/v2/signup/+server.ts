@@ -9,6 +9,13 @@ import {
   storeHandoffCode
 } from '$lib/server/utils';
 import { parseProfilePictureDataUri, generateDicebearAvatarUrl, detectGender } from '$lib/avatar';
+import {
+  normalizeName,
+  validateName,
+  normalizeUsername,
+  validateUsername,
+  sanitizeField
+} from '$lib/sanitizer';
 
 export async function POST({ request, getClientAddress }: RequestEvent) {
   try {
@@ -33,7 +40,24 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
       return json({ error: 'Missing required fields including verification code' }, { status: 400 });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const cleanDisplayName = normalizeName(displayName);
+    const nameCheck = validateName(cleanDisplayName);
+    if (!nameCheck.valid) {
+      return json({ error: nameCheck.error || 'Invalid name' }, { status: 400 });
+    }
+
+    const cleanUsername = normalizeUsername(username);
+    const userCheck = validateUsername(cleanUsername);
+    if (!userCheck.valid) {
+      return json({ error: userCheck.error || 'Invalid username' }, { status: 400 });
+    }
+
+    const cleanBranch = sanitizeField(branch);
+    const cleanSpecialization = sanitizeField(specialization);
+    const cleanPassoutYear = passoutYear ? parseInt(sanitizeField(String(passoutYear))) : null;
+    const cleanCurrentYear = currentYear ? parseInt(sanitizeField(String(currentYear))) : null;
+
+    const normalizedEmail = sanitizeField(email).toLowerCase();
 
     if (!normalizedEmail.endsWith('@paruluniversity.ac.in') && !normalizedEmail.endsWith('@getmaterio.app')) {
       return json({ error: 'Only Parul University emails are allowed (@paruluniversity.ac.in)' }, { status: 400 });
@@ -88,7 +112,7 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
     const { data: existingUserByUsername } = await supabaseAdmin
       .from('users')
       .select('username')
-      .eq('username', username)
+      .eq('username', cleanUsername)
       .maybeSingle();
 
     if (existingUserByUsername) return json({ error: 'Username already taken' }, { status: 409 });
@@ -97,9 +121,9 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
     const recoveryKey = generateRecoveryKey();
     const hashedPassword = await hashPassword(password);
     
-    const userGender = detectGender(displayName);
+    const userGender = detectGender(cleanDisplayName);
     const fallbackDicebearUrl = generateDicebearAvatarUrl({
-      seed: username || displayName || 'User',
+      seed: cleanUsername || cleanDisplayName || 'User',
       gender: userGender,
       size: 128
     });
@@ -111,17 +135,17 @@ export async function POST({ request, getClientAddress }: RequestEvent) {
     const effectiveProfilePic = isRemoteUrl ? profilePicture : fallbackDicebearUrl;
     
     const userData = {
-      username,
-      display_name: displayName,
+      username: cleanUsername,
+      display_name: cleanDisplayName,
       email: normalizedEmail,
       password: hashedPassword,
       recovery_key: recoveryKey,
       has_admin_privileges: false,
       is_plus_user: isPlusUser,
-      branch: branch,
-      current_year: currentYear,
-      passout_year: passoutYear,
-      specialization: specialization,
+      branch: cleanBranch,
+      current_year: cleanCurrentYear,
+      passout_year: cleanPassoutYear,
+      specialization: cleanSpecialization,
       university_roll_no: normalizedEmail.split('@')[0],
       profile_picture: effectiveProfilePic,
       created_at: new Date().toISOString(),

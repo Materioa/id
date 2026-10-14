@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { X } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { Cancel01Icon } from '@hugeicons/core-free-icons';
   import { fade, fly } from 'svelte/transition';
   import { openOverlay } from '@materio/ui/overlay';
   import type { Snippet } from 'svelte';
@@ -120,7 +121,7 @@
               class="p-2 -mr-2 rounded-full hover:bg-muted text-muted-foreground active:scale-[0.95] transition-all shrink-0"
               aria-label="Close"
             >
-              <X class="w-5 h-5" />
+              <HugeiconsIcon icon={Cancel01Icon} size={20} />
             </button>
           </div>
         {:else if title}
@@ -132,7 +133,7 @@
               class="p-2 -mr-2 rounded-full hover:bg-muted text-muted-foreground active:scale-[0.95] transition-all shrink-0"
               aria-label="Close"
             >
-              <X class="w-5 h-5" />
+              <HugeiconsIcon icon={Cancel01Icon} size={20} />
             </button>
           </div>
         {:else}
@@ -143,7 +144,7 @@
               class="p-2 rounded-full bg-background/50 backdrop-blur-sm hover:bg-muted text-muted-foreground active:scale-[0.95] transition-all"
               aria-label="Close"
             >
-              <X class="w-5 h-5" />
+              <HugeiconsIcon icon={Cancel01Icon} size={20} />
             </button>
           </div>
         {/if}

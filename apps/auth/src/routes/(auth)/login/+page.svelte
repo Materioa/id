@@ -12,7 +12,8 @@
   import LineArtBackground from '$lib/components/LineArtBackground.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import BudLogo from '@materio/ui/components/BudLogo.svelte';
-  import { Eye, EyeOff, ArrowLeft, ShieldAlert } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { ViewIcon, ViewOffSlashIcon, ArrowLeft02Icon, ShieldAlertIcon } from '@hugeicons/core-free-icons';
 
   // Step state: 'options' | 'sso_identity' | 'password' | '2fa'
   let step = $state<'options' | 'sso_identity' | 'password' | '2fa'>('options');
@@ -401,7 +402,7 @@
         <!-- Account Suspended View -->
         <div class="text-center space-y-5">
           <div class="mx-auto w-12 h-12 text-destructive flex items-center justify-center bg-destructive/10 rounded-full">
-            <ShieldAlert class="w-6 h-6" />
+            <HugeiconsIcon icon={ShieldAlertIcon} size={24} />
           </div>
 
           <div class="space-y-2">
@@ -514,7 +515,7 @@
                 onclick={() => { step = 'options'; clearErrors(); }}
                 class="text-xs text-muted-foreground hover:text-foreground transition-colors py-1 flex items-center gap-1.5 cursor-pointer"
               >
-                <ArrowLeft class="w-3.5 h-3.5" />
+                <HugeiconsIcon icon={ArrowLeft02Icon} size={14} />
                 <span>Back to all options</span>
               </button>
             </div>
@@ -647,9 +648,9 @@
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {#if showPassword}
-                    <EyeOff class="w-4 h-4" />
+                    <HugeiconsIcon icon={ViewOffSlashIcon} size={16} />
                   {:else}
-                    <Eye class="w-4 h-4" />
+                    <HugeiconsIcon icon={ViewIcon} size={16} />
                   {/if}
                 </button>
               </div>
@@ -690,7 +691,7 @@
                 onclick={() => { step = 'sso_identity'; clearErrors(); }}
                 class="text-xs text-muted-foreground hover:text-foreground transition-colors py-1 flex items-center gap-1 cursor-pointer"
               >
-                <ArrowLeft class="w-3.5 h-3.5" />
+                <HugeiconsIcon icon={ArrowLeft02Icon} size={14} />
                 <span>Back</span>
               </button>
             </div>
@@ -744,7 +745,7 @@
                 onclick={() => { step = 'password'; clearErrors(); }}
                 class="text-xs text-muted-foreground hover:text-foreground transition-colors py-1 flex items-center gap-1 cursor-pointer"
               >
-                <ArrowLeft class="w-3.5 h-3.5" />
+                <HugeiconsIcon icon={ArrowLeft02Icon} size={14} />
                 <span>Back to password</span>
               </button>
             </div>

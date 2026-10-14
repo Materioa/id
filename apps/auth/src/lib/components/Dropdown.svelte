@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { ChevronDown, Check } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { ChevronDownIcon, CheckmarkCircle01Icon } from '@hugeicons/core-free-icons';
   import { fade, fly } from 'svelte/transition';
   import { onMount } from 'svelte';
 
@@ -53,7 +54,7 @@
     <span class="block truncate {selectedOption ? 'text-foreground' : 'text-muted-foreground'}">
       {selectedOption ? selectedOption.label : placeholder}
     </span>
-    <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform duration-200 {isOpen ? 'rotate-180' : ''}" />
+    <HugeiconsIcon icon={ChevronDownIcon} size={16} class="text-muted-foreground transition-transform duration-200 {isOpen ? 'rotate-180' : ''}" />
   </button>
 
   {#if isOpen}
@@ -70,7 +71,7 @@
           >
             <span class="block truncate">{option.label}</span>
             {#if value === option.value}
-              <Check class="w-4 h-4 text-primary" />
+              <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} class="text-primary" />
             {/if}
           </button>
         {/each}

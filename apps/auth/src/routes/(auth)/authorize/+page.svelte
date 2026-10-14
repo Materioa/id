@@ -10,7 +10,8 @@
   import AuthCard from '$lib/components/AuthCard.svelte';
   import LineArtBackground from '$lib/components/LineArtBackground.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import { ShieldAlert, Globe, Check } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { ShieldAlertIcon, Globe02Icon, CheckmarkCircle01Icon } from '@hugeicons/core-free-icons';
 
   let isLoading = $state(true);
   let isAuthorizing = $state(false);
@@ -280,7 +281,7 @@
       {:else if errorMsg}
         <div class="text-center py-4 space-y-4">
           <div class="mx-auto w-12 h-12 text-destructive flex items-center justify-center bg-destructive/10 rounded-full">
-            <ShieldAlert class="w-6 h-6" />
+            <HugeiconsIcon icon={ShieldAlertIcon} size={24} />
           </div>
           <h2 class="text-xl font-serif font-normal text-foreground">Authorization Error</h2>
           <p class="text-xs sm:text-sm text-muted-foreground leading-relaxed px-2">{errorMsg}</p>
@@ -325,7 +326,7 @@
                 class="w-9 h-9 object-contain rounded-[10px]" 
               />
             {:else}
-              <Globe class="w-7 h-7 text-muted-foreground" />
+              <HugeiconsIcon icon={Globe02Icon} size={28} class="text-muted-foreground" />
             {/if}
           </div>
         </div>
@@ -379,7 +380,7 @@
             {#each permissionsList as p}
               <div class="flex items-start gap-2.5">
                 <div class="w-5 h-5 rounded-full bg-[#a34914]/10 dark:bg-[#c05a1e]/20 text-[#a34914] dark:text-[#e18b5b] flex items-center justify-center shrink-0 mt-0.5">
-                  <Check class="w-3.5 h-3.5" />
+                  <HugeiconsIcon icon={CheckmarkCircle01Icon} size={14} />
                 </div>
                 <div>
                   <h3 class="text-[13px] font-medium text-foreground leading-snug">{p.name}</h3>

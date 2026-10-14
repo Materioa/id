@@ -17,8 +17,9 @@
     Home01Icon, 
     ChevronRightIcon, 
     KeyIcon,
+    ViewIcon,
+    ViewOffSlashIcon
   } from "@hugeicons/core-free-icons";
-  import { Eye, EyeOff } from 'lucide-svelte';
   import { onMount } from "svelte";
   import { addToast } from "$lib/stores/toast";
   import Modal from "$lib/components/Modal.svelte";
@@ -654,9 +655,9 @@
           class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
         >
           {#if showRegeneratePassword}
-            <EyeOff class="w-4 h-4" />
+            <HugeiconsIcon icon={ViewOffSlashIcon} size={16} />
           {:else}
-            <Eye class="w-4 h-4" />
+            <HugeiconsIcon icon={ViewIcon} size={16} />
           {/if}
         </button>
       </div>

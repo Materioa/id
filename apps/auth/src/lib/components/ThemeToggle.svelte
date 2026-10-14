@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Sun, Moon } from 'lucide-svelte';
+  import { HugeiconsIcon } from '@hugeicons/svelte';
+  import { Sun01Icon, Moon02Icon } from '@hugeicons/core-free-icons';
 
   let isDark = $state(false);
 
@@ -28,8 +29,8 @@
   aria-label="Toggle theme"
 >
   {#if isDark}
-    <Sun class="w-4 h-4 transition-transform hover:rotate-45" />
+    <HugeiconsIcon icon={Sun01Icon} size={16} class="transition-transform hover:rotate-45" />
   {:else}
-    <Moon class="w-4 h-4 transition-transform hover:-rotate-12" />
+    <HugeiconsIcon icon={Moon02Icon} size={16} class="transition-transform hover:-rotate-12" />
   {/if}
 </button>
