@@ -73,15 +73,21 @@ Return ONLY a valid JSON array of objects with fields:
     }
   }
 
-  // Robust heuristic dynamic cards fallback
+  // Robust heuristic dynamic cards fallback based on real stats
+  const topApp = statsSummary.top_app_versions?.[0];
+  const topVerName = topApp?.version || 'v2.1.192';
+  const totalAppSess = (statsSummary.top_app_versions || []).reduce((acc: number, v: any) => acc + (v.total || 0), 0) || 1;
+  const topVerPct = Math.round(((topApp?.total || 23) / totalAppSess) * 100);
+  const topHardwareList = (statsSummary.top_hardware || []).map((h: any) => h.model || h).slice(0, 3).join(', ') || 'Windows PC, Android devices';
+
   return [
     {
       id: 'card_app_v2_adoption',
       title: 'App versions',
       category: 'Product',
       severity: 'success',
-      headline: 'v2.1.192 leads native rollout with 43% share',
-      details: 'Active app sessions registered across Windows x64 and Android devices (Redmi Note 10 Lite, Pixel 7, Galaxy Tab S7+).',
+      headline: `${topVerName} leads native rollout with ${topVerPct}% share`,
+      details: `Active app sessions registered across Windows x64 and mobile devices (${topHardwareList}).`,
       enabled: true
     },
     {
@@ -124,10 +130,12 @@ export async function GET({ request, url }) {
     const db = await getDb();
     const cacheColl = db.collection('admin_dashboard_cache');
 
-    // Return cached dashboard data unless refresh was explicitly requested
+    // Return cached dashboard data unless refresh was explicitly requested or cache is older than 10 minutes
+    const CACHE_TTL_MS = 10 * 60 * 1000;
     if (!isRefresh) {
       const cached = await cacheColl.findOne({ _id: 'overview_analytics' as any });
-      if (cached && cached.data) {
+      const cacheAge = cached?.cached_at ? (Date.now() - new Date(cached.cached_at).getTime()) : Infinity;
+      if (cached && cached.data && cacheAge < CACHE_TTL_MS) {
         return json({
           is_cached: true,
           cached_at: cached.cached_at,
@@ -159,49 +167,6 @@ export async function GET({ request, url }) {
       if (data.length < pageSize) break;
       page++;
     }
-
-    const totalSessions = allRecords.length;
-    let totalReadingSec = 0;
-    const readingTimesSec: number[] = [];
-    let bounceCount = 0;
-    const userActiveDays: Record<string, Set<string>> = {};
-
-    const subjectHours: Record<string, number> = {};
-    const trafficSources: Record<string, number> = {
-      Direct: 0,
-      'Old domain': 0,
-      Google: 0,
-      WhatsApp: 0,
-      Other: 0
-    };
-    const hourlyCounts = new Array(24).fill(0);
-    const hourlyApr = new Array(24).fill(0);
-    const hourlyAug = new Array(24).fill(0);
-    const hourlyOct = new Array(24).fill(0);
-    const weekdayCounts = new Array(7).fill(0); // 0 = Mon, 6 = Sun
-    const screenCounts: Record<string, number> = {};
-    const clickCounts: Record<string, number> = {};
-    const osCounts: Record<string, number> = {
-      'Windows 10/11': 0,
-      Android: 0,
-      macOS: 0,
-      iOS: 0,
-      Linux: 0,
-      Other: 0
-    };
-
-    // App telemetry
-    const appVersionCounts: Record<string, { total: number; windows: number; android: number }> = {};
-    const appHardwareCounts: Record<string, number> = {};
-    const uniqueAppDevices = new Set<string>();
-    let installedAppSessions = 0;
-    const downloadEventCounts: Record<string, number> = {
-      'File / PDF Downloads': 0,
-      'Offline Downloads Tab': 0,
-      'Installed App Sessions': 0,
-      'Version Info Inquiries': 0,
-      'Unique App Devices': 0
-    };
 
     function processRecordsSet(records: any[], isSingleMonth = false) {
       const totalSessions = records.length;
@@ -263,7 +228,7 @@ export async function GET({ request, url }) {
         const session = usermeta.session || {};
         const engagement = usermeta.engagement || {};
         const state = usermeta.state || {};
-        const deviceMeta = state.device || {};
+        const deviceMeta = state.device || usermeta.device || {};
 
         const sec = Number(metrics.total_reading_sec || 0);
         totalReadingSec += sec;
@@ -298,14 +263,23 @@ export async function GET({ request, url }) {
         else if (ref.includes('google')) trafficSources['Google']++;
         else trafficSources['Other']++;
 
-        // OS
         const ua = String(session.ua || '').toLowerCase();
-        if (ua.includes('windows nt 10.0')) osCounts['Windows 10/11']++;
-        else if (ua.includes('android')) osCounts['Android']++;
-        else if (ua.includes('iphone') || ua.includes('ipad')) osCounts['iOS']++;
-        else if (ua.includes('macintosh')) osCounts['macOS']++;
-        else if (ua.includes('linux')) osCounts['Linux']++;
-        else osCounts['Other']++;
+        const url = String(session.url || '').toLowerCase();
+
+        // OS Detection across sessions
+        if (ua.includes('windows nt 10.0') || ua.includes('windows 10') || ua.includes('windows 11') || (deviceMeta.platform === 'windows' && !ua.includes('android'))) {
+          osCounts['Windows 10/11']++;
+        } else if (ua.includes('android') || deviceMeta.platform === 'android') {
+          osCounts['Android']++;
+        } else if (ua.includes('iphone') || ua.includes('ipad') || deviceMeta.platform === 'ios') {
+          osCounts['iOS']++;
+        } else if (ua.includes('macintosh') || ua.includes('mac os') || deviceMeta.platform === 'macos') {
+          osCounts['macOS']++;
+        } else if (ua.includes('linux') || deviceMeta.platform === 'linux') {
+          osCounts['Linux']++;
+        } else {
+          osCounts['Other']++;
+        }
 
         // Screen
         const sc = session.screen;
@@ -330,12 +304,22 @@ export async function GET({ request, url }) {
           }
         }
 
-        // Clicks & Actions
-        for (const [action, count] of Object.entries(engagement)) {
+        // Clicks & Actions (support engagement.clicks object and top-level click keys)
+        const clickMap: Record<string, any> = {
+          ...(typeof engagement.clicks === 'object' && engagement.clicks !== null ? engagement.clicks : {})
+        };
+        for (const [k, v] of Object.entries(engagement)) {
+          if (typeof v === 'number' && k !== 'zoom' && k !== 'scroll' && k !== 'total_engagement_sec') {
+            clickMap[k] = (clickMap[k] || 0) + v;
+          }
+        }
+        for (const [action, count] of Object.entries(clickMap)) {
           const c = Number(count || 0);
+          if (isNaN(c) || c <= 0) continue;
           clickCounts[action] = (clickCounts[action] || 0) + c;
-          if (action.toLowerCase().includes('download')) {
-            if (action.toLowerCase().includes('tab') || action.toLowerCase().includes('offline')) {
+          const aLower = action.toLowerCase();
+          if (aLower.includes('download')) {
+            if (aLower.includes('tab') || aLower.includes('offline')) {
               offlineDownloads += c;
             } else {
               fileDownloads += c;
@@ -343,25 +327,70 @@ export async function GET({ request, url }) {
           }
         }
 
-        // App telemetry
-        const appVer = deviceMeta.app_version;
-        if (appVer) {
+        // App Telemetry (support camelCase appVersion, snake_case app_version, and wrapper URLs)
+        const rawAppVer = deviceMeta.appVersion || deviceMeta.app_version || usermeta.appVersion || usermeta.app_version || state.appVersion;
+        const isTauriUrl = url.includes('tauri.localhost') || (url.includes('localhost') && !url.includes('5173') && !url.includes('3000'));
+        const isAppPlatform = deviceMeta.platform === 'windows' || deviceMeta.platform === 'android' || deviceMeta.platform === 'ios' || deviceMeta.platform === 'macos';
+        const hasAppModel = Boolean(deviceMeta.model && deviceMeta.model !== 'Browser');
+        const isApp = Boolean(rawAppVer || isTauriUrl || isAppPlatform || hasAppModel || session.referrer?.includes('android-app'));
+
+        if (isApp) {
           installedAppSessions++;
-          const verStr = `v${appVer}`;
+
+          // Normalize version
+          let verStr: string;
+          if (rawAppVer) {
+            const vClean = String(rawAppVer).trim();
+            verStr = vClean.startsWith('v') ? vClean : `v${vClean}`;
+          } else {
+            const match = ua.match(/2\.1\.\d+/);
+            if (match) {
+              verStr = `v${match[0]}`;
+            } else if (isTauriUrl || deviceMeta.platform === 'windows' || ua.includes('windows')) {
+              verStr = 'v2.1 (Desktop)';
+            } else if (deviceMeta.platform === 'android' || ua.includes('android')) {
+              verStr = 'v2.1 (Android)';
+            } else {
+              verStr = 'v2.1 (App)';
+            }
+          }
+
           if (!appVersionCounts[verStr]) {
             appVersionCounts[verStr] = { total: 0, windows: 0, android: 0 };
           }
           appVersionCounts[verStr].total++;
-          const plat = String(deviceMeta.platform || '').toLowerCase();
-          if (plat.includes('win')) appVersionCounts[verStr].windows++;
-          else if (plat.includes('android')) appVersionCounts[verStr].android++;
 
+          const plat = String(deviceMeta.platform || '').toLowerCase();
+          if (plat.includes('win') || ua.includes('windows')) {
+            appVersionCounts[verStr].windows++;
+          } else if (plat.includes('android') || ua.includes('android')) {
+            appVersionCounts[verStr].android++;
+          }
+
+          // Hardware model normalization
+          let hwName = '';
           const brand = deviceMeta.brand || '';
           const model = deviceMeta.model || '';
-          const hwName = `${brand} ${model}`.trim() || (plat.includes('win') ? 'Windows PC (x64)' : 'Mobile Client');
+          let combinedModel = `${brand} ${model}`.trim();
+          if (combinedModel === 'SM-T975') combinedModel = 'Galaxy Tab S7+';
+          else if (combinedModel === 'CPH2341') combinedModel = 'OnePlus Nord CE 2';
+          else if (combinedModel === 'I2405') combinedModel = 'iQOO Z9s Pro';
+
+          if (combinedModel) {
+            hwName = combinedModel;
+          } else if (plat.includes('win') || ua.includes('windows')) {
+            hwName = 'Windows PC (x64)';
+          } else if (plat.includes('android') || ua.includes('android')) {
+            hwName = 'Android Device';
+          } else if (plat.includes('mac') || ua.includes('macintosh')) {
+            hwName = 'Mac Desktop';
+          } else {
+            hwName = 'Desktop Client';
+          }
           appHardwareCounts[hwName] = (appHardwareCounts[hwName] || 0) + 1;
 
-          if (deviceMeta.device_id) uniqueAppDevices.add(deviceMeta.device_id);
+          const devId = deviceMeta.installId || deviceMeta.install_id || deviceMeta.deviceId || deviceMeta.device_id || session.fp;
+          if (devId) uniqueAppDevices.add(String(devId));
         }
       }
 
@@ -386,10 +415,12 @@ export async function GET({ request, url }) {
 
       const sortedHardware = Object.entries(appHardwareCounts)
         .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
         .map(([model, count]) => ({ model, count }));
 
       const sortedAppVersions = Object.entries(appVersionCounts)
         .sort((a, b) => b[1].total - a[1].total)
+        .slice(0, 10)
         .map(([version, data]) => ({ version, ...data }));
 
       // Traffic labels and data
@@ -411,14 +442,22 @@ export async function GET({ request, url }) {
       const trafficColors = trafficData.map(v => (v >= maxTraffic * 0.75 && v > 50) ? amberColor : blueColor);
 
       const downloadCounts = {
-        'File / PDF Downloads': fileDownloads || (totalSessions > 0 ? Math.round(totalSessions * 0.09) : 1770),
-        'Offline Downloads Tab': offlineDownloads || (totalSessions > 0 ? Math.round(totalSessions * 0.005) : 94),
-        'Installed App Sessions': installedAppSessions || (totalSessions > 0 ? Math.round(totalSessions * 0.001) : 21),
-        'Version Info Inquiries': Math.max(1, Math.round((installedAppSessions || 21) * 0.8)),
-        'Unique App Devices': uniqueAppDevices.size || 5
+        'File / PDF Downloads': fileDownloads,
+        'Offline Downloads Tab': offlineDownloads,
+        'Installed App Sessions': installedAppSessions,
+        'Version Info Inquiries': Math.max(0, Math.round(installedAppSessions * 0.8)),
+        'Unique App Devices': uniqueAppDevices.size
       };
 
       return {
+        // Direct metric properties consumed by PERIOD_DATA in the overview frontend
+        sessions: totalSessions.toLocaleString(),
+        hours: Math.round(totalReadingSec / 3600).toLocaleString() + 'h',
+        avg: Math.round((totalReadingSec / (totalSessions || 1)) / 60) + ' min',
+        returnU: returnUsers.toLocaleString(),
+        downloads: (downloadCounts['File / PDF Downloads']).toLocaleString(),
+        apps: installedAppSessions.toLocaleString(),
+
         summary: {
           total_sessions: totalSessions.toLocaleString(),
           total_reading_hours: Math.round(totalReadingSec / 3600).toLocaleString() + 'h',
@@ -427,7 +466,7 @@ export async function GET({ request, url }) {
           return_users: returnUsers.toLocaleString(),
           bounce_rate: ((bounceCount / (totalSessions || 1)) * 100).toFixed(1) + '%',
           app_downloads: (downloadCounts['File / PDF Downloads']).toLocaleString(),
-          installed_app_sessions: (installedAppSessions || (totalSessions > 1000 ? 21 : 0)).toString()
+          installed_app_sessions: installedAppSessions.toLocaleString()
         },
         cTraffic: {
           labels: trafficLabels,
@@ -436,7 +475,7 @@ export async function GET({ request, url }) {
         },
         cSubjects: {
           labels: sortedSubjects.length > 0 ? sortedSubjects.map(s => s.name) : ['Quant & Reasoning', 'Mobile App Dev', 'Network Security', 'MEAN Stack'],
-          data: sortedSubjects.length > 0 ? sortedSubjects.map(s => s.hours) : [3369, 2123, 2004, 1980]
+          data: sortedSubjects.length > 0 ? sortedSubjects.map(s => s.hours) : [0, 0, 0, 0]
         },
         cSources: {
           labels: Object.keys(trafficSources),
@@ -444,27 +483,27 @@ export async function GET({ request, url }) {
         },
         cHours: hourlyCounts,
         cClicks: {
-          labels: sortedClicks.length > 0 ? sortedClicks.map(c => c.action) : ['Start reading', 'Share', 'Download', 'Home tab'],
-          data: sortedClicks.length > 0 ? sortedClicks.map(c => c.count) : [60588, 2030, 1770, 920]
+          labels: sortedClicks.length > 0 ? sortedClicks.map(c => c.action) : ['Download', 'Share', 'Start reading'],
+          data: sortedClicks.length > 0 ? sortedClicks.map(c => c.count) : [0, 0, 0]
         },
         cScreen: {
-          labels: sortedScreens.length > 0 ? sortedScreens.map(s => s.res) : ['1536x864', '1680x1050', '1280x800', '393x873'],
-          data: sortedScreens.length > 0 ? sortedScreens.map(s => s.count) : [4778, 1017, 715, 667]
+          labels: sortedScreens.length > 0 ? sortedScreens.map(s => s.res) : ['1536x864', '1280x800', '393x873'],
+          data: sortedScreens.length > 0 ? sortedScreens.map(s => s.count) : [0, 0, 0]
         },
         cHardware: {
-          labels: sortedHardware.length > 0 ? sortedHardware.map(h => h.model) : ['Windows PC (x64)', 'Redmi Note 10 Lite', 'Pixel 7', 'Galaxy Tab S7+'],
-          data: sortedHardware.length > 0 ? sortedHardware.map(h => h.count) : [15, 3, 1, 1]
+          labels: sortedHardware.length > 0 ? sortedHardware.map(h => h.model) : ['Windows PC (x64)', 'Android Device'],
+          data: sortedHardware.length > 0 ? sortedHardware.map(h => h.count) : [0, 0]
         },
         cApp: {
-          labels: sortedAppVersions.length > 0 ? sortedAppVersions.map(v => v.version) : ['v2.1.192', 'v2.1.190', 'v2.1.183'],
-          windows: sortedAppVersions.length > 0 ? sortedAppVersions.map(v => v.windows) : [7, 0, 0],
-          android: sortedAppVersions.length > 0 ? sortedAppVersions.map(v => v.android) : [2, 2, 1]
+          labels: sortedAppVersions.length > 0 ? sortedAppVersions.map(v => v.version) : ['v2.1'],
+          windows: sortedAppVersions.length > 0 ? sortedAppVersions.map(v => v.windows) : [0],
+          android: sortedAppVersions.length > 0 ? sortedAppVersions.map(v => v.android) : [0]
         },
         cOs: {
           labels: Object.keys(osCounts),
           data: Object.values(osCounts)
         },
-        downloads: (downloadCounts['File / PDF Downloads'] || 1770).toLocaleString(),
+        downloads: (downloadCounts['File / PDF Downloads']).toLocaleString(),
         cDownloads: downloadCounts
       };
     }
@@ -519,7 +558,7 @@ export async function GET({ request, url }) {
       return_users: mainPeriod.summary.return_users,
       app_downloads: mainPeriod.summary.app_downloads,
       file_downloads: mainPeriod.summary.app_downloads,
-      unique_devices: 5,
+      unique_devices: mainPeriod.cDownloads?.['Unique App Devices'] || 5,
       top_app_versions: dashboardData.app_telemetry.versions.slice(0, 3),
       top_hardware: dashboardData.app_telemetry.hardware.slice(0, 3),
       top_subjects: dashboardData.subjects.slice(0, 3)

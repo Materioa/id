@@ -74,15 +74,15 @@ u<svelte:head>
 
   const PERIOD_DATA: Record<string, any> = {
     all: {
-      sessions: '19,057',
-      hours: '18,861h',
-      avg: '59 min',
-      returnU: '2,968',
+      sessions: '20,239',
+      hours: '19,540h',
+      avg: '58 min',
+      returnU: '3,142',
       downloads: '1,770',
-      apps: '21',
+      apps: '134',
       cTraffic: {
         labels: ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
-        data: [9596, 1051, 264, 1068, 5168, 824, 1069],
+        data: [9596, 1051, 264, 1068, 5168, 824, 2269],
         colors: [amber, blue, blue, blue, amber, blue, blue]
       },
       cSubjects: {
@@ -152,12 +152,12 @@ u<svelte:head>
       }
     },
     oct: {
-      sessions: '1,069',
-      hours: '982h',
-      avg: '55 min',
-      returnU: '271',
-      downloads: '214',
-      apps: '21',
+      sessions: '2,269',
+      hours: '1,912h',
+      avg: '51 min',
+      returnU: '407',
+      downloads: '22',
+      apps: '93',
       cTraffic: {
         labels: ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
         data: [60, 186, 114, 188, 190, 187, 84, 38, 22],
@@ -272,12 +272,12 @@ u<svelte:head>
     const d = PERIOD_DATA[key];
     if (!d) return;
 
-    mSessions = d.sessions;
-    mHours = d.hours;
-    mAvg = d.avg;
-    mReturn = d.returnU;
-    mDownloads = typeof d.downloads === 'string' ? d.downloads : (d.summary?.app_downloads || '1,770');
-    mApps = d.apps;
+    mSessions = d.sessions || d.summary?.total_sessions || '0';
+    mHours = d.hours || d.summary?.total_reading_hours || '0h';
+    mAvg = d.avg || d.summary?.avg_reading_min || '0 min';
+    mReturn = d.returnU || d.summary?.return_users || '0';
+    mDownloads = typeof d.downloads === 'string' ? d.downloads : (d.summary?.app_downloads || '0');
+    mApps = d.apps || d.summary?.installed_app_sessions || '0';
 
     if (chTraffic && d.cTraffic) {
       chTraffic.data.labels = d.cTraffic.labels;
@@ -302,7 +302,7 @@ u<svelte:head>
       chHours.data.datasets[0].data = d.cHours;
       const maxVal = Math.max(...d.cHours);
       const peakIdx = d.cHours.indexOf(maxVal);
-      chHours.data.datasets[0].backgroundColor = d.cHours.map((_, i) => i === peakIdx ? amber : blue);
+      chHours.data.datasets[0].backgroundColor = d.cHours.map((_: any, i: number) => i === peakIdx ? amber : blue);
       chHours.update();
 
       const istHour = (peakIdx + 5.5) % 24;
@@ -345,6 +345,9 @@ u<svelte:head>
     if (chHardware && d.cHardware) {
       chHardware.data.labels = d.cHardware.labels;
       chHardware.data.datasets[0].data = d.cHardware.data;
+      chHardware.data.datasets[0].backgroundColor = (d.cHardware.labels || []).map((l: string) =>
+        l.includes('Windows') ? blue : green
+      );
       chHardware.update();
     }
 
@@ -388,10 +391,11 @@ u<svelte:head>
       cachedAt = res.cached_at ? formatLastUpdated(res.cached_at) : null;
 
       if (res.data?.periods) {
-        if (res.data.periods.all) PERIOD_DATA.all = { ...PERIOD_DATA.all, ...res.data.periods.all };
-        if (res.data.periods.apr) PERIOD_DATA.apr = { ...PERIOD_DATA.apr, ...res.data.periods.apr };
-        if (res.data.periods.aug) PERIOD_DATA.aug = { ...PERIOD_DATA.aug, ...res.data.periods.aug };
-        if (res.data.periods.oct) PERIOD_DATA.oct = { ...PERIOD_DATA.oct, ...res.data.periods.oct };
+        for (const [k, pData] of Object.entries(res.data.periods)) {
+          if (pData) {
+            PERIOD_DATA[k] = { ...PERIOD_DATA[k], ...(pData as any) };
+          }
+        }
       } else if (res.data?.summary) {
         PERIOD_DATA.all.sessions = res.data.summary.total_sessions;
         PERIOD_DATA.all.hours = res.data.summary.total_reading_hours;
@@ -595,12 +599,19 @@ u<svelte:head>
 
     // 2. App Downloads
     if (canvasDownloads) {
+      const dl = cur.cDownloads || (typeof cur.downloads === 'object' ? cur.downloads : null) || {
+        'File / PDF Downloads': 1770,
+        'Offline Downloads Tab': 94,
+        'Installed App Sessions': 21,
+        'Version Info Inquiries': 17,
+        'Unique App Devices': 5
+      };
       chDownloads = new Chart(canvasDownloads, {
         type: 'bar',
         data: {
-          labels: ['File / PDF Downloads', 'Offline Downloads Tab', 'Installed App Sessions', 'Version Info Inquiries', 'Unique App Devices'],
+          labels: Object.keys(dl),
           datasets: [{
-            data: [1770, 94, 21, 17, 5],
+            data: Object.values(dl),
             backgroundColor: [blue, blue, green, gray, green],
             borderRadius: 3
           }]
@@ -622,10 +633,10 @@ u<svelte:head>
       chApp = new Chart(canvasApp, {
         type: 'bar',
         data: {
-          labels: ['v2.1.192', 'v2.1.190', 'v2.1.183', 'v2.1.177', 'v2.1.175', 'v2.1.170', 'v2.1.161', 'v2.1.77'],
+          labels: cur.cApp?.labels || ['v2.1.192', 'v2.1.190', 'v2.1.183', 'v2.1.177', 'v2.1.175', 'v2.1.170', 'v2.1.161', 'v2.1.77'],
           datasets: [
-            { label: 'Windows', data: [7, 0, 0, 1, 1, 1, 1, 2], backgroundColor: blue, stack: 's', borderRadius: 2 },
-            { label: 'Android', data: [2, 2, 1, 1, 0, 0, 0, 0], backgroundColor: green, stack: 's', borderRadius: 2 }
+            { label: 'Windows', data: cur.cApp?.windows || [7, 0, 0, 1, 1, 1, 1, 2], backgroundColor: blue, stack: 's', borderRadius: 2 },
+            { label: 'Android', data: cur.cApp?.android || [2, 2, 1, 1, 0, 0, 0, 0], backgroundColor: green, stack: 's', borderRadius: 2 }
           ]
         },
         options: {
@@ -642,13 +653,15 @@ u<svelte:head>
 
     // 4. App Hardware Models
     if (canvasHardware) {
+      const hwLabels = cur.cHardware?.labels || ['Windows PC (x64)', 'Redmi Note 10 Lite', 'Pixel 7', 'OnePlus Nord CE 2', 'Galaxy Tab S7+'];
+      const hwData = cur.cHardware?.data || [15, 3, 1, 1, 1];
       chHardware = new Chart(canvasHardware, {
         type: 'bar',
         data: {
-          labels: ['Windows PC (x64)', 'Redmi Note 10 Lite', 'Pixel 7', 'OnePlus Nord CE 2', 'Galaxy Tab S7+'],
+          labels: hwLabels,
           datasets: [{
-            data: [15, 3, 1, 1, 1],
-            backgroundColor: [blue, green, green, green, green],
+            data: hwData,
+            backgroundColor: hwLabels.map((l: string) => l.includes('Windows') ? blue : green),
             borderRadius: 3
           }]
         },
@@ -669,9 +682,9 @@ u<svelte:head>
       chOs = new Chart(canvasOs, {
         type: 'doughnut',
         data: {
-          labels: ['Windows 10/11', 'Android', 'macOS', 'iOS', 'Linux', 'Other'],
+          labels: cur.cOs?.labels || ['Windows 10/11', 'Android', 'macOS', 'iOS', 'Linux', 'Other'],
           datasets: [{
-            data: [9246, 5046, 1170, 1151, 393, 2033],
+            data: cur.cOs?.data || [9246, 5046, 1170, 1151, 393, 2033],
             backgroundColor: [blue, green, gray, coral, muted, '#888'],
             borderWidth: 0
           }]
