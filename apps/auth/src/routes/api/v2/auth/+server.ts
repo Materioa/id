@@ -26,7 +26,7 @@ function getIssuer(req: Request) {
 
 function normalizeScope(scope: any) {
   const requested = String(scope || '').split(/\s+/).filter(Boolean);
-  const unique = [...new Set(requested.length ? requested : ['admin'])];
+  const unique = [...new Set(requested.length ? requested : ['openid', 'profile', 'subscription'])];
   return unique.join(' ');
 }
 
@@ -158,11 +158,13 @@ async function handleMain(req: Request, url: URL) {
 
   let action = url.searchParams.get('action') || bodyData.action;
 
-  // Auto-detect OAuth Token exchange standard requests if action is not specified
+  // Auto-detect OAuth Token exchange or Dynamic Registration standard requests if action is not specified
   if (!action && req.method === 'POST') {
     const grantType = (bodyData as any).grant_type || url.searchParams.get('grant_type');
     if (grantType === 'authorization_code' || grantType === 'refresh_token') {
       action = 'oauth_token';
+    } else if (Array.isArray((bodyData as any).redirect_uris) || (bodyData as any).redirect_uris) {
+      action = 'oauth_register_app';
     }
   }
 
@@ -744,7 +746,8 @@ async function handleOAuthRegisterApp(req: Request, bodyData: any, url: URL) {
         return oauthError(400, 'invalid_client_metadata', 'redirect_uris must contain at least one URI');
       }
 
-      const ip = req.headers.get('x-forwarded-for') || 'unknown';
+      const forwarded = req.headers.get('x-forwarded-for') || '';
+      const ip = req.headers.get('cf-connecting-ip') || forwarded.split(',')[0].trim() || 'unknown';
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const { count, error: countError } = await supabaseAdmin
         .from('oauth_registration_logs')
@@ -754,7 +757,7 @@ async function handleOAuthRegisterApp(req: Request, bodyData: any, url: URL) {
 
       if (countError) {
         console.error('Failed to query registration logs:', countError);
-      } else if (count && count >= 5) {
+      } else if (count && count >= 100) {
         return oauthError(429, 'slow_down', 'Too many registration attempts. Please try again later.');
       }
 
@@ -763,7 +766,7 @@ async function handleOAuthRegisterApp(req: Request, bodyData: any, url: URL) {
       const isPublicClient = authMethod === 'none';
       const clientSecret = isPublicClient ? null : 'secret_' + crypto.randomBytes(24).toString('hex');
       const clientName = body.client_name || 'OAuth Client';
-      const scope = normalizeScope(body.scope || 'openid profile email');
+      const scope = normalizeScope(body.scope || 'openid profile subscription');
 
       const extendedPayload = {
         client_id: clientId,
@@ -896,7 +899,11 @@ async function handleOAuthClientInfo(req: Request, bodyData: any, url: URL) {
       .single();
 
     if (error || !app) {
-      return json({ error: 'Application not found' }, { status: 404 });
+      return json({
+        client_id: clientId,
+        name: clientId.startsWith('http') ? new URL(clientId).hostname : 'Dynamic Client',
+        redirect_uri: url.searchParams.get('redirect_uri') || ''
+      }, { status: 200 });
     }
 
     return json({
