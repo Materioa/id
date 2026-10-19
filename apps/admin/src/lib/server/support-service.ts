@@ -303,7 +303,7 @@ export async function autoTriageAllPendingBugReports(): Promise<{ processed: num
   const pendingBugs = await db
     .collection('bug_reports')
     .find({
-      status: { $in: ['open', 'pending', ''] },
+      status: { $nin: ['Reviewed', 'reviewed', 'Closed', 'closed', 'Resolved', 'resolved', 'Fixed', 'fixed', 'Replied', 'replied'] },
       reviewed: { $ne: true },
       automatedReplySent: { $ne: true },
       email: { $regex: '@', $options: 'i' },

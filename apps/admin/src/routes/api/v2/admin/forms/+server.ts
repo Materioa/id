@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { supabaseAdmin, verifyToken } from '$lib/server/utils';
 import { getDb } from '$lib/server/mongo';
 import { getInterviewerTemplates, getParentFormTemplates, getFormActivityDefaults, normaliseKind, INTERVIEWER_COLLECTIONS } from '@materio/config/interviewer';
+import { autoTriageAllPendingBugReports } from '$lib/server/support-service';
 
 async function checkAdmin(request: Request) {
   const token = request.headers.get('authorization')?.replace('Bearer ', '') || '';
@@ -104,6 +105,9 @@ export async function GET({ request, url }) {
         db.collection('bug_reports').updateOne({ _id: b._id }, { $set: { caseNumber: b.caseNumber } }).catch(() => {});
       }
     }
+
+    // Auto-triage unreplied pending bugs in background whenever forms/bug reports are fetched
+    autoTriageAllPendingBugReports().catch((e) => console.error('[Forms] Auto-triage error:', e?.message || e));
 
     for (const s of submissions) {
       const email = String(s.user?.email || s.data?.email || s.email || '').trim();

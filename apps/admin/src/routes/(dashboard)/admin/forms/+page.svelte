@@ -1000,6 +1000,18 @@
             <span class="badge">{sec.kind}</span>
             <span class="text-[11px] text-muted-foreground">{sec.total} answers</span>
           </div>
+          {#if sec.id === 'bug-report' || sec.title?.toLowerCase().includes('bug')}
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ml-auto"
+              onclick={triggerBatchTriage}
+              disabled={isBatchTriageLoading}
+              title="Automatically triage all pending bug reports with AI support replies"
+            >
+              <Sparkles class="size-3.5 {isBatchTriageLoading ? 'animate-spin' : ''}" />
+              <span>{isBatchTriageLoading ? 'Auto-triaging with AI...' : 'Auto-Reply Pending (AI)'}</span>
+            </button>
+          {/if}
         </div>
 
         {#if selectedAnswerKeys.length > 0}
@@ -1948,6 +1960,20 @@
                   <Sparkles class="size-3.5 {isDraftingAi ? 'animate-spin text-primary' : ''}" />
                   <span>Draft with AI</span>
                 </button>
+
+                {#if activeTicketRow.source === 'bug'}
+                  <!-- Dispatch Auto-Reply with AI -->
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors cursor-pointer disabled:opacity-30 p-1"
+                    onclick={triggerSingleTriage}
+                    disabled={isSingleTriageLoading}
+                    title="Send automated AI acknowledgement email to user"
+                  >
+                    <Sparkles class="size-3.5 {isSingleTriageLoading ? 'animate-spin text-primary' : ''}" />
+                    <span>{isSingleTriageLoading ? 'Auto-Replying...' : 'Auto-Reply (AI)'}</span>
+                  </button>
+                {/if}
               </div>
             </div>
           </div>
