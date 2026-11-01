@@ -15,7 +15,11 @@
     ShieldAlertIcon,
     Globe02Icon,
     UserIcon,
-    Edit02Icon
+    Edit02Icon,
+    ShapeCollectionIcon,
+    HierarchyFilesIcon,
+    Mail01Icon,
+    WallpaperIcon
   } from '@hugeicons/core-free-icons';
   import { onMount } from 'svelte';
   import { userStore } from '$lib/stores/user.svelte';
@@ -76,6 +80,8 @@
     if (path.includes('/admin/notifications')) return ['Admin', 'Notifications'];
     if (path.includes('/admin/invites')) return ['Admin', 'Invites'];
     if (path.includes('/admin/bans')) return ['Admin', 'Bans'];
+    if (path.includes('/admin/email')) return ['Admin', 'Email'];
+    if (path.includes('/admin/wallpapers')) return ['Admin', 'Wallpapers'];
     if (path.includes('/admin/overview')) return ['Admin', 'Overview'];
     return ['Admin', 'Portal'];
   };
@@ -84,9 +90,11 @@
     { name: 'Overview', href: '/admin/overview', icon: DashboardSquare01Icon },
     { name: 'Writer', href: '/admin/writer', icon: Edit02Icon },
     { name: 'Uploads', href: '/admin/uploads', icon: Upload01Icon },
-    { name: 'File Management', href: '/admin/files', icon: Folder01Icon },
+    { name: 'File Management', href: '/admin/files', icon: HierarchyFilesIcon },
+    { name: 'Wallpapers', href: '/admin/wallpapers', icon: WallpaperIcon },
+    { name: 'Email', href: '/admin/email', icon: Mail01Icon },
     { name: 'Promotions', href: '/admin/promotions', icon: Megaphone01Icon },
-    { name: 'Forms & Wizards', href: '/admin/forms', icon: Folder01Icon },
+    { name: 'Forms & Wizards', href: '/admin/forms', icon: ShapeCollectionIcon },
     { name: 'Releases', href: '/admin/releases', icon: CodeIcon },
     { name: 'Exams & Seating', href: '/admin/exams', icon: TestTube01Icon },
     { name: 'Notifications', href: '/admin/notifications', icon: Notification01Icon },
